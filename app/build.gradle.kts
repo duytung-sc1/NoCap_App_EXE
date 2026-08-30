@@ -35,6 +35,12 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    testOptions {
+        unitTests {
+            isReturnDefaultValues = true
+        }
+    }
+
     buildFeatures {
         compose = true
     }
@@ -71,6 +77,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.navigation:navigation-compose:2.8.5")
+    implementation("androidx.fragment:fragment-ktx:1.8.5")
 
     // Room Database 2.7.2 (KSP2-compatible)
     implementation("androidx.room:room-runtime:2.7.2")
@@ -93,15 +100,11 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     // -------------------------------------------------------------------
-    // Readium Kotlin Toolkit 3.3.0
-    // DEFERRED TO MILESTONE 5 (EPUB Reader integration).
-    // Readium's transitive deps (Ktor, OkHttp, Coil, etc.) are large and
-    // cannot be dexed in Milestone 1 on this build machine without OOM.
-    // These lines are preserved here for Milestone 5; do NOT remove.
+    // Readium Kotlin Toolkit 3.3.0 (EPUB Reader Engine)
     // -------------------------------------------------------------------
-    // implementation("org.readium.kotlin-toolkit:readium-shared:3.3.0")
-    // implementation("org.readium.kotlin-toolkit:readium-streamer:3.3.0")
-    // implementation("org.readium.kotlin-toolkit:readium-navigator:3.3.0")
+    implementation("org.readium.kotlin-toolkit:readium-shared:3.3.0")
+    implementation("org.readium.kotlin-toolkit:readium-streamer:3.3.0")
+    implementation("org.readium.kotlin-toolkit:readium-navigator:3.3.0")
 
     // Unit Testing
     testImplementation("junit:junit:4.13.2")
