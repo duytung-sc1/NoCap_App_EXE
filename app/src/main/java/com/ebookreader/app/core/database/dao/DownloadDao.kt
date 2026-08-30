@@ -1,4 +1,4 @@
-﻿package com.ebookreader.app.core.database.dao
+package com.ebookreader.app.core.database.dao
 
 import androidx.room.Dao
 import androidx.room.Insert
@@ -21,6 +21,9 @@ interface DownloadDao {
 
     @Query("SELECT * FROM downloaded_books WHERE book_id = :bookId")
     suspend fun getDownloadByBookId(bookId: String): DownloadedBookEntity?
+
+    @Query("SELECT * FROM downloaded_books WHERE content_hash = :hash LIMIT 1")
+    suspend fun getDownloadByHash(hash: String): DownloadedBookEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertDownload(download: DownloadedBookEntity)

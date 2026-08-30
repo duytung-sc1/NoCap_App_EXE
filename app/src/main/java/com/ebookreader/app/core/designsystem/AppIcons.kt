@@ -118,4 +118,85 @@ object AppIcons {
             }
         }.build()
     }
+
+    val Book: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "Book",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            path(
+                fill = SolidColor(Color.Black),
+                fillAlpha = 1.0f,
+                stroke = null,
+                strokeAlpha = 1.0f,
+                strokeLineWidth = 1.0f,
+                strokeLineCap = StrokeCap.Butt,
+                strokeLineJoin = StrokeJoin.Miter,
+                strokeLineMiter = 1.0f,
+                pathFillType = PathFillType.NonZero
+            ) {
+                moveTo(18f, 2f)
+                horizontalLineTo(6f)
+                curveTo(4.9f, 2f, 4f, 2.9f, 4f, 4f)
+                verticalLineTo(20f)
+                curveTo(4f, 21.1f, 4.9f, 22f, 6f, 22f)
+                horizontalLineTo(18f)
+                curveTo(19.1f, 22f, 20f, 21.1f, 20f, 20f)
+                verticalLineTo(4f)
+                curveTo(20f, 2.9f, 19.1f, 2f, 18f, 2f)
+                close()
+                moveTo(6f, 4f)
+                horizontalLineTo(11f)
+                verticalLineTo(12f)
+                lineTo(8.5f, 10.5f)
+                lineTo(6f, 12f)
+                verticalLineTo(4f)
+                close()
+            }
+        }.build()
+    }
+
+    val Sort: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "Sort",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            path(
+                fill = SolidColor(Color.Black),
+                fillAlpha = 1.0f,
+                stroke = null,
+                strokeAlpha = 1.0f,
+                strokeLineWidth = 1.0f,
+                strokeLineCap = StrokeCap.Butt,
+                strokeLineJoin = StrokeJoin.Miter,
+                strokeLineMiter = 1.0f,
+                pathFillType = PathFillType.NonZero
+            ) {
+                moveTo(3f, 18f)
+                horizontalLineTo(9f)
+                verticalLineTo(16f)
+                horizontalLineTo(3f)
+                verticalLineTo(18f)
+                close()
+                moveTo(3f, 6f)
+                verticalLineTo(8f)
+                horizontalLineTo(21f)
+                verticalLineTo(6f)
+                horizontalLineTo(3f)
+                close()
+                moveTo(3f, 13f)
+                horizontalLineTo(15f)
+                verticalLineTo(11f)
+                horizontalLineTo(3f)
+                verticalLineTo(13f)
+                close()
+            }
+        }.build()
+    }
 }

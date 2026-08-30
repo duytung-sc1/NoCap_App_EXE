@@ -1,4 +1,4 @@
-﻿package com.ebookreader.app.core.database.dao
+package com.ebookreader.app.core.database.dao
 
 import androidx.room.Dao
 import androidx.room.Insert
@@ -20,4 +20,7 @@ interface BookmarkDao {
 
     @Query("DELETE FROM bookmarks WHERE id = :bookmarkId")
     suspend fun hardDeleteBookmark(bookmarkId: String)
+
+    @Query("DELETE FROM bookmarks WHERE book_id = :bookId")
+    suspend fun deleteBookmarksByBookId(bookId: String)
 }

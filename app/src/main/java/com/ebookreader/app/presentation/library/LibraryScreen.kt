@@ -1,5 +1,7 @@
 package com.ebookreader.app.presentation.library
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -19,7 +21,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
@@ -27,6 +29,8 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import com.ebookreader.app.core.designsystem.AppIcons
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -34,6 +38,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -41,13 +46,17 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,6 +68,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -72,13 +82,35 @@ import com.ebookreader.app.domain.model.LibraryBook
 fun LibraryScreen(
     onBookClick: (String) -> Unit,
     onReadBookClick: (String) -> Unit,
-    onNavigateToDiscover: () -> Unit = {},
+    onNavigateToDiscover: () -> Unit,
     viewModel: MyLibraryViewModel = viewModel(
         factory = MyLibraryViewModel.provideFactory(LocalContext.current)
     )
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    var showSortMenu by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    var bookToDelete by remember { mutableStateOf<LibraryBook?>(null) }
+
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.onImportEpub(uri)
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.events.collect { event ->
+            when (event) {
+                is LibraryEvent.ImportSuccess -> {
+                    snackbarHostState.showSnackbar("Đã thêm \"${event.bookTitle}\" vào thư viện!")
+                }
+                is LibraryEvent.ShowMessage -> {
+                    snackbarHostState.showSnackbar(event.message)
+                }
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -91,105 +123,113 @@ fun LibraryScreen(
                     )
                 },
                 actions = {
-                    Box {
-                        IconButton(onClick = { showSortMenu = true }) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.List,
-                                contentDescription = "Sắp xếp"
+                    IconButton(
+                        onClick = {
+                            filePickerLauncher.launch(
+                                arrayOf("application/epub+zip", "application/octet-stream", "*/*")
                             )
                         }
-                        DropdownMenu(
-                            expanded = showSortMenu,
-                            onDismissRequest = { showSortMenu = false }
-                        ) {
-                            LibrarySort.entries.forEach { sortOption ->
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            text = sortOption.displayName,
-                                            fontWeight = if (uiState.selectedSort == sortOption) FontWeight.Bold else FontWeight.Normal
-                                        )
-                                    },
-                                    onClick = {
-                                        viewModel.onSortChange(sortOption)
-                                        showSortMenu = false
-                                    }
-                                )
-                            }
-                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Nhập sách EPUB"
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background
                 )
             )
-        }
-    ) { paddingValues ->
+        },
+        floatingActionButton = {
+            ExtendedFloatingActionButton(
+                onClick = {
+                    filePickerLauncher.launch(
+                        arrayOf("application/epub+zip", "application/octet-stream", "*/*")
+                    )
+                },
+                icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                text = { Text("Nhập EPUB") },
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        containerColor = MaterialTheme.colorScheme.background
+    ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
+                .padding(innerPadding)
         ) {
-            // Search Bar in Library
-            Surface(
+            // Search Bar
+            TextField(
+                value = uiState.searchQuery,
+                onValueChange = viewModel::onSearchQueryChange,
+                placeholder = { Text("Tìm trong thư viện...") },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Tìm kiếm",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
+                trailingIcon = {
+                    if (uiState.searchQuery.isNotBlank()) {
+                        IconButton(onClick = { viewModel.onSearchQueryChange("") }) {
+                            Icon(
+                                imageVector = Icons.Default.Clear,
+                                contentDescription = "Xóa tìm kiếm"
+                            )
+                        }
+                    }
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                colors = TextFieldDefaults.colors(
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    disabledIndicatorColor = Color.Transparent
+                ),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant
-            ) {
-                TextField(
-                    value = uiState.searchQuery,
-                    onValueChange = viewModel::onSearchQueryChange,
-                    placeholder = {
-                        Text(
-                            "Tìm trong thư viện...",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = "Tìm kiếm",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    },
-                    trailingIcon = {
-                        if (uiState.searchQuery.isNotBlank()) {
-                            IconButton(onClick = { viewModel.onSearchQueryChange("") }) {
-                                Icon(
-                                    imageVector = Icons.Default.Clear,
-                                    contentDescription = "Xóa tìm kiếm"
-                                )
-                            }
-                        }
-                    },
-                    singleLine = true,
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+            )
 
-            // Filter Chips Row
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(LibraryFilter.entries) { filter ->
-                    FilterChip(
-                        selected = uiState.selectedFilter == filter,
-                        onClick = { viewModel.onFilterChange(filter) },
-                        label = { Text(filter.displayName) }
-                    )
+            // Filter & Sort Row
+            FilterAndSortRow(
+                selectedFilter = uiState.selectedFilter,
+                selectedSort = uiState.selectedSort,
+                onFilterSelected = viewModel::onFilterChange,
+                onSortSelected = viewModel::onSortChange
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Importing indicator
+            if (uiState.isImporting) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        Text(
+                            text = "Đang xử lý và kiểm tra file EPUB...",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
 
-            if (uiState.isLoading) {
+            // Content List
+            if (uiState.isLoading && uiState.books.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -197,56 +237,129 @@ fun LibraryScreen(
                     CircularProgressIndicator()
                 }
             } else if (uiState.books.isEmpty()) {
-                // Empty state
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(24.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = if (uiState.searchQuery.isNotBlank()) "Không tìm thấy sách phù hợp" else "Thư viện của bạn đang trống",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onBackground
+                EmptyLibraryView(
+                    searchQuery = uiState.searchQuery,
+                    onNavigateToDiscover = onNavigateToDiscover,
+                    onImportClick = {
+                        filePickerLauncher.launch(
+                            arrayOf("application/epub+zip", "application/octet-stream", "*/*")
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = if (uiState.searchQuery.isNotBlank()) "Thử tìm kiếm với từ khóa khác" else "Tải sách để đọc offline bất cứ lúc nào",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        if (uiState.searchQuery.isBlank()) {
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Button(
-                                onClick = onNavigateToDiscover,
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Text("Khám phá sách")
-                            }
-                        }
                     }
-                }
+                )
             } else {
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    contentPadding = PaddingValues(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = 8.dp,
+                        bottom = 88.dp
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxSize()
                 ) {
                     items(uiState.books, key = { it.book.id }) { libraryBook ->
                         LibraryBookItem(
                             libraryBook = libraryBook,
-                            onBookClick = { onBookClick(libraryBook.book.id) },
+                            onBookClick = {
+                                if (libraryBook.book.categoryId == "imported") {
+                                    onReadBookClick(libraryBook.book.id)
+                                } else {
+                                    onBookClick(libraryBook.book.id)
+                                }
+                            },
                             onReadClick = { onReadBookClick(libraryBook.book.id) },
+                            onToggleFavorite = { viewModel.onToggleFavorite(libraryBook.book.id) },
                             onRemoveDownload = { viewModel.onRemoveDownload(libraryBook.book.id) },
-                            onUpdateBook = { viewModel.onUpdateBook(libraryBook.book.id) },
-                            onToggleFavorite = { viewModel.onToggleFavorite(libraryBook.book.id) }
+                            onDeleteImportedBook = { bookToDelete = libraryBook },
+                            onUpdateBook = { viewModel.onUpdateBook(libraryBook.book.id) }
                         )
                     }
+                }
+            }
+        }
+    }
+
+    // Confirmation Dialog for Deleting Imported Book
+    bookToDelete?.let { book ->
+        AlertDialog(
+            onDismissRequest = { bookToDelete = null },
+            title = { Text("Xóa sách khỏi thư viện?") },
+            text = {
+                Text("Sách \"${book.book.title}\" và toàn bộ dấu trang, tiến độ đọc sẽ bị xóa vĩnh viễn khỏi thiết bị.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.onDeleteImportedBook(book.book.id)
+                        bookToDelete = null
+                    }
+                ) {
+                    Text("Xóa", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { bookToDelete = null }) {
+                    Text("Hủy")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun FilterAndSortRow(
+    selectedFilter: LibraryFilter,
+    selectedSort: LibrarySort,
+    onFilterSelected: (LibraryFilter) -> Unit,
+    onSortSelected: (LibrarySort) -> Unit
+) {
+    var showSortMenu by remember { mutableStateOf(false) }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.weight(1f)
+        ) {
+            items(LibraryFilter.entries.toTypedArray()) { filter ->
+                FilterChip(
+                    selected = selectedFilter == filter,
+                    onClick = { onFilterSelected(filter) },
+                    label = { Text(filter.displayName) }
+                )
+            }
+        }
+
+        Box {
+            IconButton(onClick = { showSortMenu = true }) {
+                Icon(
+                    imageVector = AppIcons.Sort,
+                    contentDescription = "Sắp xếp",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+            DropdownMenu(
+                expanded = showSortMenu,
+                onDismissRequest = { showSortMenu = false }
+            ) {
+                LibrarySort.entries.forEach { sort ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = sort.displayName,
+                                fontWeight = if (selectedSort == sort) FontWeight.Bold else FontWeight.Normal
+                            )
+                        },
+                        onClick = {
+                            onSortSelected(sort)
+                            showSortMenu = false
+                        }
+                    )
                 }
             }
         }
@@ -254,22 +367,26 @@ fun LibraryScreen(
 }
 
 @Composable
-fun LibraryBookItem(
+private fun LibraryBookItem(
     libraryBook: LibraryBook,
     onBookClick: () -> Unit,
     onReadClick: () -> Unit,
+    onToggleFavorite: () -> Unit,
     onRemoveDownload: () -> Unit,
-    onUpdateBook: () -> Unit,
-    onToggleFavorite: () -> Unit
+    onDeleteImportedBook: () -> Unit,
+    onUpdateBook: () -> Unit
 ) {
     var showMenu by remember { mutableStateOf(false) }
+    val isImported = libraryBook.book.categoryId == "imported"
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onBookClick),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
@@ -284,14 +401,40 @@ fun LibraryBookItem(
                     .width(72.dp)
                     .height(108.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center
             ) {
-                AsyncImage(
-                    model = libraryBook.book.coverUrl,
-                    contentDescription = libraryBook.book.title,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.matchParentSize()
-                )
+                if (libraryBook.book.coverUrl.isNotBlank()) {
+                    AsyncImage(
+                        model = libraryBook.book.coverUrl,
+                        contentDescription = libraryBook.book.title,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.matchParentSize()
+                    )
+                } else {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                        modifier = Modifier.padding(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = AppIcons.Book,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = libraryBook.book.title,
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center,
+                            fontSize = 9.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.width(14.dp))
@@ -336,19 +479,37 @@ fun LibraryBookItem(
                     overflow = TextOverflow.Ellipsis
                 )
 
-                // Update available badge
-                if (libraryBook.isUpdateAvailable) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = MaterialTheme.colorScheme.tertiaryContainer
-                    ) {
-                        Text(
-                            text = "Có bản mới",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onTertiaryContainer,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
+                // Badges Row
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.padding(top = 4.dp)
+                ) {
+                    if (isImported) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer
+                        ) {
+                            Text(
+                                text = "Sách cá nhân",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
+                    if (libraryBook.isUpdateAvailable) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.tertiaryContainer
+                        ) {
+                            Text(
+                                text = "Có bản mới",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
                     }
                 }
 
@@ -413,13 +574,15 @@ fun LibraryBookItem(
                             expanded = showMenu,
                             onDismissRequest = { showMenu = false }
                         ) {
-                            DropdownMenuItem(
-                                text = { Text("Xem chi tiết") },
-                                onClick = {
-                                    showMenu = false
-                                    onBookClick()
-                                }
-                            )
+                            if (!isImported) {
+                                DropdownMenuItem(
+                                    text = { Text("Xem chi tiết") },
+                                    onClick = {
+                                        showMenu = false
+                                        onBookClick()
+                                    }
+                                )
+                            }
                             if (libraryBook.isUpdateAvailable) {
                                 DropdownMenuItem(
                                     text = { Text("Cập nhật sách") },
@@ -431,7 +594,12 @@ fun LibraryBookItem(
                                 )
                             }
                             DropdownMenuItem(
-                                text = { Text("Xóa bản tải", color = MaterialTheme.colorScheme.error) },
+                                text = {
+                                    Text(
+                                        text = if (isImported) "Xóa khỏi thư viện" else "Xóa bản tải",
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                },
                                 leadingIcon = {
                                     Icon(
                                         imageVector = Icons.Default.Delete,
@@ -441,10 +609,79 @@ fun LibraryBookItem(
                                 },
                                 onClick = {
                                     showMenu = false
-                                    onRemoveDownload()
+                                    if (isImported) {
+                                        onDeleteImportedBook()
+                                    } else {
+                                        onRemoveDownload()
+                                    }
                                 }
                             )
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyLibraryView(
+    searchQuery: String,
+    onNavigateToDiscover: () -> Unit,
+    onImportClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = AppIcons.Book,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier.size(64.dp)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            if (searchQuery.isNotBlank()) {
+                Text(
+                    text = "Không tìm thấy sách",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Không có kết quả nào phù hợp với \"$searchQuery\"",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+            } else {
+                Text(
+                    text = "Thư viện của bạn đang trống",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Khám phá các cuốn sách hay hoặc nhập tệp EPUB từ thiết bị của bạn",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(20.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(onClick = onNavigateToDiscover) {
+                        Text("Khám phá sách")
+                    }
+                    OutlinedButton(onClick = onImportClick) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Nhập EPUB")
                     }
                 }
             }

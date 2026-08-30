@@ -1,5 +1,7 @@
 package com.ebookreader.app.presentation.library
 
+import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -7,14 +9,19 @@ import com.ebookreader.app.core.database.AppDatabase
 import com.ebookreader.app.data.catalog.LocalCatalogRepository
 import com.ebookreader.app.data.download.LocalBookDownloadRepository
 import com.ebookreader.app.data.favorite.LocalFavoriteRepository
+import com.ebookreader.app.data.importer.LocalImportBookRepository
 import com.ebookreader.app.data.library.LocalLibraryRepository
 import com.ebookreader.app.domain.model.LibraryBook
 import com.ebookreader.app.domain.repository.BookDownloadRepository
 import com.ebookreader.app.domain.repository.FavoriteRepository
+import com.ebookreader.app.domain.repository.ImportBookRepository
 import com.ebookreader.app.domain.repository.LibraryRepository
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -32,30 +39,42 @@ enum class LibrarySort(val displayName: String) {
     DOWNLOAD_DATE("Ngày tải")
 }
 
+sealed interface LibraryEvent {
+    data class ImportSuccess(val bookTitle: String) : LibraryEvent
+    data class ShowMessage(val message: String) : LibraryEvent
+}
+
 data class MyLibraryUiState(
     val books: List<LibraryBook> = emptyList(),
     val searchQuery: String = "",
     val selectedFilter: LibraryFilter = LibraryFilter.ALL,
     val selectedSort: LibrarySort = LibrarySort.RECENTLY_READ,
-    val isLoading: Boolean = true
+    val isLoading: Boolean = true,
+    val isImporting: Boolean = false
 )
 
 class MyLibraryViewModel(
     private val libraryRepository: LibraryRepository,
     private val downloadRepository: BookDownloadRepository,
-    private val favoriteRepository: FavoriteRepository
+    private val favoriteRepository: FavoriteRepository,
+    private val importRepository: ImportBookRepository
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
     private val _selectedFilter = MutableStateFlow(LibraryFilter.ALL)
     private val _selectedSort = MutableStateFlow(LibrarySort.RECENTLY_READ)
+    private val _isImporting = MutableStateFlow(false)
+
+    private val _events = MutableSharedFlow<LibraryEvent>()
+    val events: SharedFlow<LibraryEvent> = _events.asSharedFlow()
 
     val uiState: StateFlow<MyLibraryUiState> = combine(
         libraryRepository.observeLibraryBooks(),
         _searchQuery,
         _selectedFilter,
-        _selectedSort
-    ) { libraryBooks, query, filter, sort ->
+        _selectedSort,
+        _isImporting
+    ) { libraryBooks, query, filter, sort, isImporting ->
         // 1. Search filter
         val searchFiltered = if (query.isBlank()) {
             libraryBooks
@@ -93,7 +112,8 @@ class MyLibraryViewModel(
             searchQuery = query,
             selectedFilter = filter,
             selectedSort = sort,
-            isLoading = false
+            isLoading = false,
+            isImporting = isImporting
         )
     }.stateIn(
         viewModelScope,
@@ -119,6 +139,31 @@ class MyLibraryViewModel(
         }
     }
 
+    fun onDeleteImportedBook(bookId: String) {
+        viewModelScope.launch {
+            val result = importRepository.deleteImportedBook(bookId)
+            if (result.isSuccess) {
+                _events.emit(LibraryEvent.ShowMessage("Đã xóa sách khỏi thư viện"))
+            } else {
+                _events.emit(LibraryEvent.ShowMessage("Không thể xóa sách"))
+            }
+        }
+    }
+
+    fun onImportEpub(uri: Uri) {
+        viewModelScope.launch {
+            _isImporting.value = true
+            val result = importRepository.importEpub(uri)
+            _isImporting.value = false
+
+            result.onSuccess {
+                _events.emit(LibraryEvent.ShowMessage("Nhập sách thành công!"))
+            }.onFailure { error ->
+                _events.emit(LibraryEvent.ShowMessage(error.message ?: "Lỗi khi nhập sách"))
+            }
+        }
+    }
+
     fun onUpdateBook(bookId: String) {
         viewModelScope.launch {
             downloadRepository.startDownload(bookId)
@@ -132,7 +177,7 @@ class MyLibraryViewModel(
     }
 
     companion object {
-        fun provideFactory(context: android.content.Context): ViewModelProvider.Factory =
+        fun provideFactory(context: Context): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -156,7 +201,15 @@ class MyLibraryViewModel(
                         catalogDao = db.catalogDao(),
                         catalogRepository = catalogRepo
                     )
-                    return MyLibraryViewModel(libraryRepo, downloadRepo, favRepo) as T
+                    val importRepo = LocalImportBookRepository(
+                        context = context,
+                        catalogDao = db.catalogDao(),
+                        downloadDao = db.downloadDao(),
+                        progressDao = db.progressDao(),
+                        bookmarkDao = db.bookmarkDao(),
+                        favoriteDao = db.favoriteDao()
+                    )
+                    return MyLibraryViewModel(libraryRepo, downloadRepo, favRepo, importRepo) as T
                 }
             }
     }
