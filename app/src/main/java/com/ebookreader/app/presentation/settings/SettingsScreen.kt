@@ -1,48 +1,463 @@
-﻿package com.ebookreader.app.presentation.settings
+package com.ebookreader.app.presentation.settings
 
+import android.content.pm.PackageInfo
+import android.os.Build
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.ebookreader.app.core.datastore.ReaderFontFamily
+import com.ebookreader.app.core.datastore.ReaderTextAlignment
+import com.ebookreader.app.core.datastore.ReaderTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(
+    viewModel: SettingsViewModel = viewModel(
+        factory = SettingsViewModel.provideFactory(LocalContext.current)
+    )
+) {
+    val context = LocalContext.current
+    val preferences by viewModel.preferences.collectAsStateWithLifecycle()
+    var showResetDialog by remember { mutableStateOf(false) }
+
+    val packageInfo: PackageInfo? = remember(context) {
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.packageManager.getPackageInfo(context.packageName, android.content.pm.PackageManager.PackageInfoFlags.of(0))
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageInfo(context.packageName, 0)
+            }
+        }.getOrNull()
+    }
+    val versionName = packageInfo?.versionName ?: "1.0.0"
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Settings", style = MaterialTheme.typography.titleLarge) }
+                title = {
+                    Text(
+                        text = "Cài đặt",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background
+                )
             )
-        }
+        },
+        containerColor = MaterialTheme.colorScheme.background
     ) { paddingValues ->
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues),
-            contentAlignment = Alignment.Center
+                .padding(paddingValues)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 12.dp)
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "Reader & App Settings",
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = "Theme (Light, Dark, Sepia) and Typography settings",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
+            // SECTION 1: TÙY CHỈNH ĐỌC SÁCH
+            Text(
+                text = "Tùy chỉnh đọc sách",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    // Theme
+                    Text(
+                        text = "Giao diện đọc sách",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        SettingsThemeCard(
+                            name = "Sáng",
+                            bgColor = Color(0xFFFFFFFF),
+                            textColor = Color(0xFF000000),
+                            isSelected = preferences.theme == ReaderTheme.LIGHT,
+                            onClick = { viewModel.updateTheme(ReaderTheme.LIGHT) },
+                            modifier = Modifier.weight(1f)
+                        )
+                        SettingsThemeCard(
+                            name = "Sepia",
+                            bgColor = Color(0xFFF4ECD8),
+                            textColor = Color(0xFF5B4636),
+                            isSelected = preferences.theme == ReaderTheme.SEPIA,
+                            onClick = { viewModel.updateTheme(ReaderTheme.SEPIA) },
+                            modifier = Modifier.weight(1f)
+                        )
+                        SettingsThemeCard(
+                            name = "Tối",
+                            bgColor = Color(0xFF1E1E1E),
+                            textColor = Color(0xFFE0E0E0),
+                            isSelected = preferences.theme == ReaderTheme.DARK,
+                            onClick = { viewModel.updateTheme(ReaderTheme.DARK) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider()
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Font Size
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Cỡ chữ mặc định",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            OutlinedButton(
+                                onClick = { viewModel.updateFontSize((preferences.fontSizeMultiplier - 0.1f).coerceIn(0.8f, 2.0f)) },
+                                shape = CircleShape,
+                                modifier = Modifier.size(36.dp),
+                                contentPadding = PaddingValues(0.dp)
+                            ) {
+                                Text("A-", fontWeight = FontWeight.Bold)
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = "${(preferences.fontSizeMultiplier * 100).toInt()}%",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.width(50.dp),
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            OutlinedButton(
+                                onClick = { viewModel.updateFontSize((preferences.fontSizeMultiplier + 0.1f).coerceIn(0.8f, 2.0f)) },
+                                shape = CircleShape,
+                                modifier = Modifier.size(36.dp),
+                                contentPadding = PaddingValues(0.dp)
+                            ) {
+                                Text("A+", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider()
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Font Family
+                    Text(
+                        text = "Kiểu chữ",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterChip(
+                            selected = preferences.fontFamily == ReaderFontFamily.SYSTEM_DEFAULT,
+                            onClick = { viewModel.updateFontFamily(ReaderFontFamily.SYSTEM_DEFAULT) },
+                            label = { Text("Mặc định") }
+                        )
+                        FilterChip(
+                            selected = preferences.fontFamily == ReaderFontFamily.SERIF,
+                            onClick = { viewModel.updateFontFamily(ReaderFontFamily.SERIF) },
+                            label = { Text("Serif", fontFamily = FontFamily.Serif) }
+                        )
+                        FilterChip(
+                            selected = preferences.fontFamily == ReaderFontFamily.SANS_SERIF,
+                            onClick = { viewModel.updateFontFamily(ReaderFontFamily.SANS_SERIF) },
+                            label = { Text("Sans-Serif", fontFamily = FontFamily.SansSerif) }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider()
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Text Alignment & Scroll Mode
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "Căn lề văn bản",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                FilterChip(
+                                    selected = preferences.textAlignment == ReaderTextAlignment.START,
+                                    onClick = { viewModel.updateTextAlignment(ReaderTextAlignment.START) },
+                                    label = { Text("Trái") }
+                                )
+                                FilterChip(
+                                    selected = preferences.textAlignment == ReaderTextAlignment.JUSTIFY,
+                                    onClick = { viewModel.updateTextAlignment(ReaderTextAlignment.JUSTIFY) },
+                                    label = { Text("Đều") }
+                                )
+                            }
+                        }
+
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                text = "Cuộn dọc",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Switch(
+                                checked = preferences.isScrollMode,
+                                onCheckedChange = viewModel::updateScrollMode
+                            )
+                        }
+                    }
+                }
             }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // SECTION 2: KHÔI PHỤC CÀI ĐẶT
+            Text(
+                text = "Quản lý cài đặt",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showResetDialog = true }
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Khôi phục cài đặt đọc mặc định",
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "Đặt lại cỡ chữ 100%, theme sáng và kiểu chữ mặc định",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Khôi phục",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(start = 12.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // SECTION 3: THÔNG TIN ỨNG DỤNG
+            Text(
+                text = "Thông tin ứng dụng",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Tên ứng dụng",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "Ebook Simulator",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    HorizontalDivider()
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Phiên bản",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "v$versionName",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    HorizontalDivider()
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Reader Engine",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "Readium Kotlin 3.3.0",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
         }
+    }
+
+    if (showResetDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetDialog = false },
+            title = { Text("Khôi phục cài đặt?") },
+            text = { Text("Bạn có chắc chắn muốn đặt lại toàn bộ tùy chỉnh giao diện và phông chữ đọc sách về mặc định?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.resetDefaults()
+                        showResetDialog = false
+                    }
+                ) {
+                    Text("Khôi phục")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetDialog = false }) {
+                    Text("Hủy")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+fun SettingsThemeCard(
+    name: String,
+    bgColor: Color,
+    textColor: Color,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .height(50.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(bgColor)
+            .border(
+                width = if (isSelected) 2.5.dp else 1.dp,
+                color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Gray.copy(alpha = 0.3f),
+                shape = RoundedCornerShape(12.dp)
+            )
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = name,
+            color = textColor,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+            style = MaterialTheme.typography.bodyMedium
+        )
     }
 }

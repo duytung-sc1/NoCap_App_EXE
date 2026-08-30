@@ -29,6 +29,7 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,9 +44,16 @@ import com.ebookreader.app.presentation.components.BookCard
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DiscoverScreen(
+    initialCategoryId: String? = null,
     onBookClick: (String) -> Unit,
     viewModel: CatalogViewModel = viewModel(factory = CatalogViewModel.Factory)
 ) {
+    LaunchedEffect(initialCategoryId) {
+        if (!initialCategoryId.isNullOrBlank()) {
+            viewModel.selectCategory(initialCategoryId)
+        }
+    }
+
     val discoverState by viewModel.discoverState.collectAsStateWithLifecycle()
     val categories by viewModel.categories.collectAsStateWithLifecycle()
     val books by viewModel.discoverBooks.collectAsStateWithLifecycle()

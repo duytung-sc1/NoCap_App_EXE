@@ -1,4 +1,4 @@
-﻿package com.ebookreader.app.core.navigation
+package com.ebookreader.app.core.navigation
 
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -15,12 +15,13 @@ fun BottomNavBar(navController: NavController) {
 
     NavigationBar {
         Screen.bottomNavItems.forEach { screen ->
-            val isSelected = currentRoute == screen.route
+            val targetRoute = if (screen == Screen.Discover) Screen.Discover.createRoute() else screen.route
+            val isSelected = currentRoute == screen.route || (screen == Screen.Discover && currentRoute?.startsWith("discover") == true)
             NavigationBarItem(
                 selected = isSelected,
                 onClick = {
-                    if (currentRoute != screen.route) {
-                        navController.navigate(screen.route) {
+                    if (!isSelected) {
+                        navController.navigate(targetRoute) {
                             popUpTo(Screen.Home.route) {
                                 saveState = true
                             }

@@ -62,6 +62,15 @@ class CatalogViewModel(
         _discoverState.update { it.copy(searchQuery = query, selectedCategoryId = "all") }
     }
 
+    fun selectCategory(categoryId: String) {
+        _discoverState.update {
+            it.copy(
+                selectedCategoryId = categoryId,
+                searchQuery = ""
+            )
+        }
+    }
+
     fun onCategorySelected(categoryId: String) {
         _discoverState.update {
             it.copy(

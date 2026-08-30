@@ -1,4 +1,4 @@
-﻿package com.ebookreader.app.core.navigation
+package com.ebookreader.app.core.navigation
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
@@ -10,7 +10,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 
 sealed class Screen(val route: String, val title: String? = null, val icon: ImageVector? = null) {
     data object Home : Screen("home", "Home", Icons.Default.Home)
-    data object Discover : Screen("discover", "Discover", Icons.Default.Search)
+    data object Discover : Screen("discover?categoryId={categoryId}", "Discover", Icons.Default.Search) {
+        fun createRoute(categoryId: String? = null) = if (categoryId != null) "discover?categoryId=$categoryId" else "discover"
+    }
     data object Library : Screen("library", "Library", Icons.AutoMirrored.Filled.List)
     data object Favorites : Screen("favorites", "Favorites", Icons.Default.Favorite)
     data object Settings : Screen("settings", "Settings", Icons.Default.Settings)

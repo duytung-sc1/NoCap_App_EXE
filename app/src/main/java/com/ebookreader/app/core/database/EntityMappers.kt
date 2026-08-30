@@ -108,3 +108,25 @@ fun ReadingProgress.toEntity(): ReadingProgressEntity = ReadingProgressEntity(
     lastReadAt = lastReadAt,
     syncVersion = syncVersion
 )
+
+fun com.ebookreader.app.core.database.entity.BookmarkEntity.toDomain(): com.ebookreader.app.domain.model.Bookmark = com.ebookreader.app.domain.model.Bookmark(
+    id = id,
+    bookId = bookId,
+    locatorJson = locatorJson,
+    chapterTitle = chapterTitle,
+    snippet = snippet,
+    createdAt = createdAt,
+    syncVersion = syncVersion,
+    isDeleted = isDeleted
+)
+
+fun com.ebookreader.app.domain.model.Bookmark.toEntity(): com.ebookreader.app.core.database.entity.BookmarkEntity = com.ebookreader.app.core.database.entity.BookmarkEntity(
+    id = id,
+    bookId = bookId,
+    locatorJson = locatorJson,
+    chapterTitle = chapterTitle,
+    snippet = snippet,
+    createdAt = createdAt,
+    syncVersion = syncVersion,
+    isDeleted = isDeleted
+)

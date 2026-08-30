@@ -1,24 +1,17 @@
 package com.ebookreader.app.presentation.home
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LargeTopAppBar
@@ -32,14 +25,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.ebookreader.app.domain.model.CatalogBook
 import com.ebookreader.app.domain.model.Category
 import com.ebookreader.app.domain.model.HomeFeed
 import com.ebookreader.app.presentation.catalog.CatalogViewModel
@@ -51,6 +41,7 @@ import com.ebookreader.app.presentation.components.HorizontalBookCard
 fun HomeScreen(
     onBookClick: (String) -> Unit,
     onContinueReadingClick: (String) -> Unit,
+    onCategoryClick: (String) -> Unit,
     viewModel: CatalogViewModel = viewModel(factory = CatalogViewModel.Factory)
 ) {
     val homeFeed by viewModel.homeFeed.collectAsStateWithLifecycle()
@@ -61,7 +52,7 @@ fun HomeScreen(
             LargeTopAppBar(
                 title = {
                     Text(
-                        text = "Good reading 📚",
+                        text = "Good reading \uD83D\uDCDA",
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -79,7 +70,8 @@ fun HomeScreen(
             feed = homeFeed,
             innerPadding = innerPadding,
             onBookClick = onBookClick,
-            onContinueReadingClick = onContinueReadingClick
+            onContinueReadingClick = onContinueReadingClick,
+            onCategoryClick = onCategoryClick
         )
     }
 }
@@ -89,7 +81,8 @@ private fun HomeContent(
     feed: HomeFeed,
     innerPadding: PaddingValues,
     onBookClick: (String) -> Unit,
-    onContinueReadingClick: (String) -> Unit
+    onContinueReadingClick: (String) -> Unit,
+    onCategoryClick: (String) -> Unit
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -99,7 +92,7 @@ private fun HomeContent(
         ),
         verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
-        // ── Continue Reading ────────────────────────────────────────────────
+        // --- Continue Reading ---
         if (feed.continueReading.isNotEmpty()) {
             item { SectionHeader(title = "Continue Reading") }
             item {
@@ -123,7 +116,7 @@ private fun HomeContent(
             item { Spacer(modifier = Modifier.height(24.dp)) }
         }
 
-        // ── Featured Books ───────────────────────────────────────────────────
+        // --- Featured Books ---
         if (feed.featuredBooks.isNotEmpty()) {
             item { SectionHeader(title = "Featured Books") }
             item {
@@ -143,14 +136,24 @@ private fun HomeContent(
             item { Spacer(modifier = Modifier.height(24.dp)) }
         }
 
-        // ── Categories ──────────────────────────────────────────────────────
+        // --- Categories ---
         if (feed.categories.isNotEmpty()) {
-            item { SectionHeader(title = "Browse Categories") }
-            item { CategoriesRow(categories = feed.categories) }
+            item {
+                SectionHeader(
+                    title = "Browse Categories",
+                    onSeeAll = { onCategoryClick("all") }
+                )
+            }
+            item {
+                CategoriesRow(
+                    categories = feed.categories,
+                    onCategoryClick = onCategoryClick
+                )
+            }
             item { Spacer(modifier = Modifier.height(24.dp)) }
         }
 
-        // ── New Arrivals ────────────────────────────────────────────────────
+        // --- New Arrivals ---
         if (feed.newBooks.isNotEmpty()) {
             item { SectionHeader(title = "New Arrivals") }
             item {
@@ -203,20 +206,30 @@ private fun SectionHeader(
 }
 
 @Composable
-private fun CategoriesRow(categories: List<Category>) {
+private fun CategoriesRow(
+    categories: List<Category>,
+    onCategoryClick: (String) -> Unit
+) {
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         items(categories, key = { it.id }) { category ->
-            CategoryChip(category = category)
+            CategoryChip(
+                category = category,
+                onClick = { onCategoryClick(category.id) }
+            )
         }
     }
 }
 
 @Composable
-private fun CategoryChip(category: Category) {
+private fun CategoryChip(
+    category: Category,
+    onClick: () -> Unit
+) {
     Surface(
+        onClick = onClick,
         shape = RoundedCornerShape(50),
         color = MaterialTheme.colorScheme.primaryContainer,
         modifier = Modifier

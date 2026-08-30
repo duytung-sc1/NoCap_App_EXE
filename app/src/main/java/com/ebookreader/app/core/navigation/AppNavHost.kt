@@ -28,7 +28,7 @@ fun AppNavHost() {
 
     Scaffold(
         bottomBar = {
-            if (!isFullScreen && Screen.bottomNavItems.any { it.route == currentRoute }) {
+            if (!isFullScreen && Screen.bottomNavItems.any { it.route == currentRoute || (it == Screen.Discover && currentRoute?.startsWith("discover") == true) }) {
                 BottomNavBar(navController = navController)
             }
         }
@@ -45,11 +45,25 @@ fun AppNavHost() {
                     },
                     onContinueReadingClick = { bookId ->
                         navController.navigate(Screen.Reader.createRoute(bookId))
+                    },
+                    onCategoryClick = { categoryId ->
+                        navController.navigate(Screen.Discover.createRoute(categoryId))
                     }
                 )
             }
-            composable(Screen.Discover.route) {
+            composable(
+                route = Screen.Discover.route,
+                arguments = listOf(
+                    navArgument("categoryId") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    }
+                )
+            ) { backStackEntry ->
+                val categoryId = backStackEntry.arguments?.getString("categoryId")
                 DiscoverScreen(
+                    initialCategoryId = categoryId,
                     onBookClick = { bookId ->
                         navController.navigate(Screen.BookDetails.createRoute(bookId))
                     }
@@ -64,7 +78,7 @@ fun AppNavHost() {
                         navController.navigate(Screen.Reader.createRoute(bookId))
                     },
                     onNavigateToDiscover = {
-                        navController.navigate(Screen.Discover.route)
+                        navController.navigate(Screen.Discover.createRoute())
                     }
                 )
             }
