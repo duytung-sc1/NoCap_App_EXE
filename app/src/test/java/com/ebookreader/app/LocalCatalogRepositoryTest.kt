@@ -1,0 +1,64 @@
+package com.ebookreader.app
+
+import com.ebookreader.app.data.catalog.LocalCatalogRepository
+import com.ebookreader.app.data.catalog.SeedCatalogDataSource
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+
+class LocalCatalogRepositoryTest {
+
+    private lateinit var repository: LocalCatalogRepository
+
+    @Before
+    fun setup() {
+        repository = LocalCatalogRepository()
+    }
+
+    @Test
+    fun observeHomeFeed_emitsExpectedSections() = runTest {
+        val feed = repository.observeHomeFeed().first()
+
+        assertNotNull(feed)
+        assertTrue(feed.featuredBooks.isNotEmpty())
+        assertTrue(feed.featuredBooks.all { it.isFeatured })
+        assertTrue(feed.newBooks.isNotEmpty())
+        assertTrue(feed.newBooks.all { it.isNew })
+        assertEquals(SeedCatalogDataSource.categories.size, feed.categories.size)
+    }
+
+    @Test
+    fun observeBooksByCategory_filtersCorrectly() = runTest {
+        val fictionBooks = repository.observeBooksByCategory("fiction").first()
+        assertTrue(fictionBooks.isNotEmpty())
+        assertTrue(fictionBooks.all { it.categoryId == "fiction" })
+
+        val allBooks = repository.observeBooksByCategory("all").first()
+        assertEquals(SeedCatalogDataSource.books.size, allBooks.size)
+    }
+
+    @Test
+    fun searchBooks_matchesTitleAndAuthor() = runTest {
+        val resultsByTitle = repository.searchBooks("Midnight").first()
+        assertEquals(1, resultsByTitle.size)
+        assertEquals("The Midnight Library", resultsByTitle.first().title)
+
+        val resultsByAuthor = repository.searchBooks("Weir").first()
+        assertEquals(1, resultsByAuthor.size)
+        assertEquals("Andy Weir", resultsByAuthor.first().author)
+
+        val emptyQuery = repository.searchBooks("").first()
+        assertEquals(SeedCatalogDataSource.books.size, emptyQuery.size)
+    }
+
+    @Test
+    fun getBookById_returnsCorrectBook() = runTest {
+        val book = repository.getBookById("book-001")
+        assertNotNull(book)
+        assertEquals("The Midnight Library", book?.title)
+    }
+}
