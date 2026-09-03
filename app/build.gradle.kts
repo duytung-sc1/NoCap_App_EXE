@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "com.ebookreader.app"
+    namespace = "com.nocap.app"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.ebookreader.app"
+        applicationId = "com.nocap.app"
         minSdk = 26
         targetSdk = 36
         versionCode = 1
