@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "847491126060",
+    "project_id": "nocap-bc464",
+    "storage_bucket": "nocap-bc464.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:847491126060:android:77397deecae4d778b5d289",
+        "android_client_info": {
+          "package_name": "com.nocap.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "847491126060-m82ns42tfb65m1qakrfgdt9uk6278vkp.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.nocap.app",
+            "certificate_hash": "a9ecab3aa267eaeda19b8947efbaef8fefe57ffa"
+          }
+        },
+        {
+          "client_id": "847491126060-3dikoskpsf80ibrnf799tivmpe8vj2bn.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCqpeBqqWkmcHd23OMymeHYVKxrO7U-qWQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "847491126060-3dikoskpsf80ibrnf799tivmpe8vj2bn.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

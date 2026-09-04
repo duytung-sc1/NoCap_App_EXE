@@ -4,18 +4,38 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.auth.FirebaseAuthRecentLoginRequiredException
+import com.nocap.app.R
+import com.nocap.app.core.datastore.DevicePreferencesDataStore
 import com.nocap.app.core.datastore.ReaderFontFamily
 import com.nocap.app.core.datastore.ReaderPreferences
 import com.nocap.app.core.datastore.ReaderPreferencesDataStore
 import com.nocap.app.core.datastore.ReaderTextAlignment
 import com.nocap.app.core.datastore.ReaderTheme
+import com.nocap.app.data.auth.BackendAccountRepository
+import com.nocap.app.data.auth.FirebaseAuthRepository
+import com.nocap.app.data.auth.GoogleSignInHelper
+import com.nocap.app.data.auth.LocalDeviceRepository
+import com.nocap.app.domain.model.AuthState
+import com.nocap.app.domain.model.AuthUser
+import com.nocap.app.domain.model.UserProfile
+import com.nocap.app.domain.repository.AccountRepository
+import com.nocap.app.domain.repository.AuthRepository
+import com.nocap.app.domain.repository.DeviceRepository
+import com.nocap.app.presentation.auth.AuthUiState
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class SettingsViewModel(
-    private val preferencesDataStore: ReaderPreferencesDataStore
+    private val preferencesDataStore: ReaderPreferencesDataStore,
+    private val authRepository: AuthRepository,
+    private val accountRepository: AccountRepository,
+    private val deviceRepository: DeviceRepository,
+    private val googleSignInHelper: GoogleSignInHelper = GoogleSignInHelper()
 ) : ViewModel() {
 
     val preferences: StateFlow<ReaderPreferences> = preferencesDataStore.readerPreferences
@@ -25,6 +45,312 @@ class SettingsViewModel(
             initialValue = ReaderPreferences()
         )
 
+    val authState: StateFlow<AuthState> = authRepository.authState
+
+    private val _userProfile = MutableStateFlow<UserProfile?>(null)
+    val userProfile: StateFlow<UserProfile?> = _userProfile.asStateFlow()
+
+    private val _authUiState = MutableStateFlow(AuthUiState())
+    val authUiState: StateFlow<AuthUiState> = _authUiState.asStateFlow()
+
+    // Dialog state
+    var showLoginDialog = MutableStateFlow(false)
+        private set
+    var showRegisterDialog = MutableStateFlow(false)
+        private set
+    var showForgotPasswordDialog = MutableStateFlow(false)
+        private set
+    var showEditProfileDialog = MutableStateFlow(false)
+        private set
+    var showDeleteAccountDialog = MutableStateFlow(false)
+        private set
+
+    init {
+        viewModelScope.launch {
+            authRepository.authState.collect { state ->
+                if (state is AuthState.Authenticated) {
+                    syncWithBackendAfterAuth(state.user)
+                } else {
+                    _userProfile.value = null
+                }
+            }
+        }
+    }
+
+    suspend fun syncWithBackendAfterAuth(user: AuthUser) {
+        val profileResult = accountRepository.getProfile()
+        profileResult.onSuccess { profile ->
+            _userProfile.value = profile
+            _authUiState.value = _authUiState.value.copy(
+                isServerUnavailable = false,
+                serverStatusMessage = null
+            )
+            // Register device after successful profile fetch/auto-provision
+            runCatching { deviceRepository.registerDevice() }
+        }.onFailure { err ->
+            // DO NOT Firebase signOut if backend is offline/error
+            _authUiState.value = _authUiState.value.copy(
+                isServerUnavailable = true,
+                serverStatusMessage = "Máy chủ backend chưa khả dụng: ${err.localizedMessage ?: "Mất kết nối"}"
+            )
+        }
+    }
+
+    fun retryBackendSync() {
+        viewModelScope.launch {
+            val currentAuth = authState.value
+            if (currentAuth is AuthState.Authenticated) {
+                _authUiState.value = _authUiState.value.copy(isLoading = true)
+                syncWithBackendAfterAuth(currentAuth.user)
+                _authUiState.value = _authUiState.value.copy(isLoading = false)
+            }
+        }
+    }
+
+    fun openLogin() {
+        _authUiState.value = AuthUiState()
+        showLoginDialog.value = true
+        showRegisterDialog.value = false
+        showForgotPasswordDialog.value = false
+    }
+
+    fun dismissLogin() {
+        showLoginDialog.value = false
+        _authUiState.value = AuthUiState()
+    }
+
+    fun openRegister() {
+        _authUiState.value = AuthUiState()
+        showRegisterDialog.value = true
+        showLoginDialog.value = false
+    }
+
+    fun dismissRegister() {
+        showRegisterDialog.value = false
+        _authUiState.value = AuthUiState()
+    }
+
+    fun openForgotPassword() {
+        _authUiState.value = AuthUiState()
+        showForgotPasswordDialog.value = true
+        showLoginDialog.value = false
+    }
+
+    fun dismissForgotPassword() {
+        showForgotPasswordDialog.value = false
+        _authUiState.value = AuthUiState()
+    }
+
+    fun openEditProfile() {
+        showEditProfileDialog.value = true
+    }
+
+    fun dismissEditProfile() {
+        showEditProfileDialog.value = false
+    }
+
+    fun openDeleteAccount() {
+        showDeleteAccountDialog.value = true
+    }
+
+    fun dismissDeleteAccount() {
+        showDeleteAccountDialog.value = false
+    }
+
+    fun loginWithEmail(email: String, pass: String) {
+        viewModelScope.launch {
+            _authUiState.value = AuthUiState(isLoading = true)
+            val result = authRepository.loginWithEmail(email, pass)
+            result.onSuccess { user ->
+                _authUiState.value = AuthUiState()
+                showLoginDialog.value = false
+                // Flow: Auth success -> GET /me -> PUT /devices
+                syncWithBackendAfterAuth(user)
+            }.onFailure { error ->
+                _authUiState.value = AuthUiState(
+                    errorMessage = error.localizedMessage ?: "Đăng nhập thất bại"
+                )
+            }
+        }
+    }
+
+    fun registerWithEmail(email: String, pass: String, confirmPass: String) {
+        if (pass != confirmPass) {
+            _authUiState.value = AuthUiState(errorMessage = "Mật khẩu xác nhận không khớp")
+            return
+        }
+        if (pass.length < 6) {
+            _authUiState.value = AuthUiState(errorMessage = "Mật khẩu phải có ít nhất 6 ký tự")
+            return
+        }
+
+        viewModelScope.launch {
+            _authUiState.value = AuthUiState(isLoading = true)
+            val result = authRepository.registerWithEmail(email, pass)
+            result.onSuccess {
+                _authUiState.value = AuthUiState(
+                    successMessage = "Tạo tài khoản thành công! Vui lòng kiểm tra email để xác thực."
+                )
+                showRegisterDialog.value = false
+            }.onFailure { error ->
+                _authUiState.value = AuthUiState(
+                    errorMessage = error.localizedMessage ?: "Đăng ký thất bại"
+                )
+            }
+        }
+    }
+
+    fun signInWithGoogle(activityContext: Context) {
+        val serverClientId = activityContext.getString(R.string.default_web_client_id)
+
+        viewModelScope.launch {
+            _authUiState.value = AuthUiState(isLoading = true)
+            val tokenResult = googleSignInHelper.getGoogleIdToken(activityContext, serverClientId)
+            tokenResult.onSuccess { idToken ->
+                val authResult = authRepository.signInWithGoogle(idToken)
+                authResult.onSuccess { user ->
+                    _authUiState.value = AuthUiState()
+                    showLoginDialog.value = false
+                    syncWithBackendAfterAuth(user)
+                }.onFailure { err ->
+                    _authUiState.value = AuthUiState(
+                        errorMessage = err.localizedMessage ?: "Đăng nhập Google thất bại"
+                    )
+                }
+            }.onFailure { err ->
+                _authUiState.value = AuthUiState(
+                    errorMessage = err.localizedMessage ?: "Không thể kết nối tài khoản Google"
+                )
+            }
+        }
+    }
+
+    fun sendEmailVerification() {
+        viewModelScope.launch {
+            _authUiState.value = AuthUiState(isLoading = true)
+            authRepository.sendEmailVerification()
+                .onSuccess {
+                    _authUiState.value = AuthUiState(
+                        successMessage = "Đã gửi lại email xác thực. Vui lòng kiểm tra hộp thư!"
+                    )
+                }
+                .onFailure { err ->
+                    _authUiState.value = AuthUiState(
+                        errorMessage = err.localizedMessage ?: "Không thể gửi email xác thực"
+                    )
+                }
+        }
+    }
+
+    fun reloadVerification() {
+        viewModelScope.launch {
+            _authUiState.value = AuthUiState(isLoading = true)
+            authRepository.reloadUser()
+                .onSuccess { newState ->
+                    _authUiState.value = AuthUiState()
+                    if (newState is AuthState.Authenticated) {
+                        syncWithBackendAfterAuth(newState.user)
+                    }
+                }
+                .onFailure { err ->
+                    _authUiState.value = AuthUiState(
+                        errorMessage = err.localizedMessage ?: "Không thể làm mới trạng thái"
+                    )
+                }
+        }
+    }
+
+    fun sendPasswordReset(email: String) {
+        viewModelScope.launch {
+            _authUiState.value = AuthUiState(isLoading = true)
+            authRepository.sendPasswordReset(email)
+                .onSuccess {
+                    _authUiState.value = AuthUiState(
+                        successMessage = "Đã gửi email khôi phục mật khẩu. Vui lòng kiểm tra hộp thư!"
+                    )
+                }
+                .onFailure { err ->
+                    _authUiState.value = AuthUiState(
+                        errorMessage = err.localizedMessage ?: "Không thể gửi email khôi phục"
+                    )
+                }
+        }
+    }
+
+    fun updateDisplayName(name: String) {
+        viewModelScope.launch {
+            _authUiState.value = AuthUiState(isLoading = true)
+            // Primary source of truth: backend UserProfile
+            accountRepository.updateProfile(displayName = name)
+                .onSuccess { updatedProfile ->
+                    _userProfile.value = updatedProfile
+                    // Also synchronize Firebase displayName
+                    authRepository.updateProfile(displayName = name)
+                    _authUiState.value = AuthUiState()
+                    showEditProfileDialog.value = false
+                }
+                .onFailure { err ->
+                    _authUiState.value = AuthUiState(
+                        errorMessage = err.localizedMessage ?: "Không thể cập nhật tên hiển thị trên máy chủ"
+                    )
+                }
+        }
+    }
+
+    fun signOut() {
+        viewModelScope.launch {
+            runCatching { deviceRepository.unregisterDevice() }
+            authRepository.signOut()
+            _userProfile.value = null
+            _authUiState.value = AuthUiState()
+        }
+    }
+
+    fun deleteAccount() {
+        viewModelScope.launch {
+            _authUiState.value = AuthUiState(isLoading = true)
+
+            // 1. Delete backend profile & devices
+            val backendResult = accountRepository.deleteProfile()
+            if (backendResult.isFailure) {
+                val err = backendResult.exceptionOrNull()
+                _authUiState.value = AuthUiState(
+                    errorMessage = "Không thể xóa hồ sơ trên máy chủ: ${err?.localizedMessage ?: "Lỗi kết nối"}"
+                )
+                return@launch
+            }
+
+            // 2. Delete Firebase account
+            val firebaseResult = authRepository.deleteAccount()
+            if (firebaseResult.isFailure) {
+                val err = firebaseResult.exceptionOrNull()
+                if (err is FirebaseAuthRecentLoginRequiredException || err?.message?.contains("recent", ignoreCase = true) == true) {
+                    _authUiState.value = AuthUiState(
+                        errorMessage = "Yêu cầu đăng nhập lại: Để xóa tài khoản, vui lòng đăng xuất và đăng nhập lại trước khi thực hiện."
+                    )
+                } else {
+                    _authUiState.value = AuthUiState(
+                        errorMessage = "Không thể xóa tài khoản Firebase: ${err?.localizedMessage ?: "Lỗi xác thực"}"
+                    )
+                }
+                return@launch
+            }
+
+            // 3. Only on complete success: transition to Guest
+            showDeleteAccountDialog.value = false
+            _userProfile.value = null
+            _authUiState.value = AuthUiState(successMessage = "Tài khoản đã được xóa thành công")
+        }
+    }
+
+    fun continueAsGuest() {
+        authRepository.continueAsGuest()
+        showLoginDialog.value = false
+        showRegisterDialog.value = false
+        _authUiState.value = AuthUiState()
+    }
+
+    // Reader Preferences methods
     fun updateTheme(theme: ReaderTheme) {
         viewModelScope.launch { preferencesDataStore.updateTheme(theme) }
     }
@@ -64,8 +390,21 @@ class SettingsViewModel(
         fun provideFactory(context: Context): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                val appContext = context.applicationContext
+                val authRepo = FirebaseAuthRepository()
+                val accountRepo = BackendAccountRepository(tokenProvider = authRepo)
+                val deviceDataStore = DevicePreferencesDataStore(appContext)
+                val deviceRepo = LocalDeviceRepository(
+                    devicePreferencesDataStore = deviceDataStore,
+                    tokenProvider = authRepo
+                )
+
                 return SettingsViewModel(
-                    preferencesDataStore = ReaderPreferencesDataStore(context.applicationContext)
+                    preferencesDataStore = ReaderPreferencesDataStore(appContext),
+                    authRepository = authRepo,
+                    accountRepository = accountRepo,
+                    deviceRepository = deviceRepo,
+                    googleSignInHelper = GoogleSignInHelper()
                 ) as T
             }
         }

@@ -3,6 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -105,6 +106,19 @@ dependencies {
     implementation("org.readium.kotlin-toolkit:readium-shared:3.3.0")
     implementation("org.readium.kotlin-toolkit:readium-streamer:3.3.0")
     implementation("org.readium.kotlin-toolkit:readium-navigator:3.3.0")
+
+    // -------------------------------------------------------------------
+    // Firebase BoM & Auth (M8B)
+    // -------------------------------------------------------------------
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("com.google.firebase:firebase-auth")
+
+    // -------------------------------------------------------------------
+    // Android Credential Manager & Google ID for Google Sign-In
+    // -------------------------------------------------------------------
+    implementation("androidx.credentials:credentials:1.3.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
 
     // Unit Testing
     testImplementation("junit:junit:4.13.2")

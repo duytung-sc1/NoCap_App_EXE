@@ -22,10 +22,17 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -55,9 +62,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
 import com.nocap.app.core.datastore.ReaderFontFamily
 import com.nocap.app.core.datastore.ReaderTextAlignment
 import com.nocap.app.core.datastore.ReaderTheme
+import com.nocap.app.domain.model.AuthState
+import com.nocap.app.presentation.auth.EditProfileDialog
+import com.nocap.app.presentation.auth.ForgotPasswordDialog
+import com.nocap.app.presentation.auth.LoginDialog
+import com.nocap.app.presentation.auth.RegisterDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,6 +81,16 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val preferences by viewModel.preferences.collectAsStateWithLifecycle()
+    val authState by viewModel.authState.collectAsStateWithLifecycle()
+    val userProfile by viewModel.userProfile.collectAsStateWithLifecycle()
+    val authUiState by viewModel.authUiState.collectAsStateWithLifecycle()
+
+    val showLogin by viewModel.showLoginDialog.collectAsStateWithLifecycle()
+    val showRegister by viewModel.showRegisterDialog.collectAsStateWithLifecycle()
+    val showForgotPassword by viewModel.showForgotPasswordDialog.collectAsStateWithLifecycle()
+    val showEditProfile by viewModel.showEditProfileDialog.collectAsStateWithLifecycle()
+    val showDeleteAccount by viewModel.showDeleteAccountDialog.collectAsStateWithLifecycle()
+
     var showResetDialog by remember { mutableStateOf(false) }
 
     val packageInfo: PackageInfo? = remember(context) {
@@ -106,6 +129,339 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 12.dp)
         ) {
+            // SECTION 0: TÀI KHOẢN (ACCOUNT / AUTH - M8B)
+            Text(
+                text = "Tài khoản",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            when (val state = authState) {
+                is AuthState.Loading -> {
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(24.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
+                        }
+                    }
+                }
+
+                is AuthState.Guest -> {
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.AccountCircle,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(44.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = "Bạn đang dùng chế độ khách",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "Đăng nhập để bảo vệ và đồng bộ dữ liệu của bạn",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Button(
+                                    onClick = { viewModel.openLogin() },
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Đăng nhập")
+                                }
+                                OutlinedButton(
+                                    onClick = { viewModel.openRegister() },
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Tạo tài khoản")
+                                }
+                            }
+                        }
+                    }
+                }
+
+                is AuthState.RequiresEmailVerification -> {
+                    val user = state.user
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Warning,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(36.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = "Yêu cầu xác thực Email",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                    Text(
+                                        text = "Đã gửi link tới: ${user.email.orEmpty()}",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
+
+                            if (!authUiState.errorMessage.isNullOrBlank()) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = authUiState.errorMessage.orEmpty(),
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            if (!authUiState.successMessage.isNullOrBlank()) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = authUiState.successMessage.orEmpty(),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(14.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Button(
+                                    onClick = { viewModel.reloadVerification() },
+                                    enabled = !authUiState.isLoading,
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Đã xác thực", fontSize = 12.sp)
+                                }
+                                OutlinedButton(
+                                    onClick = { viewModel.sendEmailVerification() },
+                                    enabled = !authUiState.isLoading,
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Gửi lại link", fontSize = 12.sp)
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            TextButton(
+                                onClick = { viewModel.signOut() },
+                                modifier = Modifier.align(Alignment.CenterHorizontally)
+                            ) {
+                                Text("Đăng xuất", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                }
+
+                is AuthState.Authenticated -> {
+                    val user = state.user
+                    val effectiveDisplayName = userProfile?.displayName?.takeIf { it != "null" && it.isNotBlank() } ?: user.displayName?.takeIf { it != "null" && it.isNotBlank() } ?: "Người dùng NoCap"
+                    val effectivePhotoUrl = userProfile?.photoUrl ?: user.photoUrl
+
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            // Server unavailable banner
+                            if (authUiState.isServerUnavailable) {
+                                Card(
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 12.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(10.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Warning,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.error,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = "Máy chủ ngoại tuyến. Tính năng ngoại tuyến vẫn hoạt động bình thường.",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.error
+                                            )
+                                        }
+                                        TextButton(onClick = { viewModel.retryBackendSync() }) {
+                                            Text("Thử lại", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
+
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (!effectivePhotoUrl.isNullOrBlank()) {
+                                    AsyncImage(
+                                        model = effectivePhotoUrl,
+                                        contentDescription = "Avatar",
+                                        modifier = Modifier
+                                            .size(52.dp)
+                                            .clip(CircleShape)
+                                    )
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(52.dp)
+                                            .clip(CircleShape)
+                                            .background(MaterialTheme.colorScheme.primaryContainer),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = effectiveDisplayName.take(1).uppercase(),
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.width(14.dp))
+
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = effectiveDisplayName,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = user.email.orEmpty(),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.CheckCircle,
+                                            contentDescription = null,
+                                            tint = Color(0xFF4CAF50),
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = if (user.providerId == "google.com") "Google Account" else "Email đã xác thực",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color(0xFF4CAF50),
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+                            HorizontalDivider()
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                OutlinedButton(
+                                    onClick = { viewModel.openEditProfile() },
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Đổi tên")
+                                }
+
+                                OutlinedButton(
+                                    onClick = { viewModel.signOut() },
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Text("Đăng xuất")
+                                }
+
+                                TextButton(
+                                    onClick = { viewModel.openDeleteAccount() },
+                                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                                ) {
+                                    Text("Xóa tài khoản")
+                                }
+                            }
+                        }
+                    }
+                }
+
+                is AuthState.Error -> {
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text = "Lỗi xác thực: ${state.message}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            TextButton(onClick = { viewModel.continueAsGuest() }) {
+                                Text("Tiếp tục với tư cách khách")
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
             // SECTION 1: TÙY CHỈNH ĐỌC SÁCH
             Text(
                 text = "Tùy chỉnh đọc sách",
@@ -359,7 +715,7 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = "Ebook Simulator",
+                            text = "NoCap",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -405,6 +761,88 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
         }
+    }
+
+    // Dialogs
+    if (showLogin) {
+        LoginDialog(
+            isLoading = authUiState.isLoading,
+            errorMessage = authUiState.errorMessage,
+            onDismiss = { viewModel.dismissLogin() },
+            onLogin = { email, pass -> viewModel.loginWithEmail(email, pass) },
+            onGoogleSignIn = { viewModel.signInWithGoogle(context) },
+            onNavigateToRegister = { viewModel.openRegister() },
+            onNavigateToForgotPassword = { viewModel.openForgotPassword() },
+            onContinueAsGuest = { viewModel.continueAsGuest() }
+        )
+    }
+
+    if (showRegister) {
+        RegisterDialog(
+            isLoading = authUiState.isLoading,
+            errorMessage = authUiState.errorMessage,
+            onDismiss = { viewModel.dismissRegister() },
+            onRegister = { email, pass, confirm -> viewModel.registerWithEmail(email, pass, confirm) },
+            onNavigateToLogin = { viewModel.openLogin() }
+        )
+    }
+
+    if (showForgotPassword) {
+        ForgotPasswordDialog(
+            isLoading = authUiState.isLoading,
+            errorMessage = authUiState.errorMessage,
+            successMessage = authUiState.successMessage,
+            onDismiss = { viewModel.dismissForgotPassword() },
+            onSendReset = { email -> viewModel.sendPasswordReset(email) }
+        )
+    }
+
+    if (showEditProfile) {
+        val currentName = (userProfile?.displayName ?: (authState as? AuthState.Authenticated)?.user?.displayName)?.takeIf { it != "null" && it.isNotBlank() }
+        EditProfileDialog(
+            initialDisplayName = currentName,
+            isLoading = authUiState.isLoading,
+            onDismiss = { viewModel.dismissEditProfile() },
+            onConfirm = { newName -> viewModel.updateDisplayName(newName) }
+        )
+    }
+
+    if (showDeleteAccount) {
+        AlertDialog(
+            onDismissRequest = { if (!authUiState.isLoading) viewModel.dismissDeleteAccount() },
+            title = { Text("Xác nhận xóa tài khoản?") },
+            text = {
+                Column {
+                    Text("Hành động này sẽ xóa vĩnh viễn tài khoản của bạn và toàn bộ dữ liệu hồ sơ liên kết trên máy chủ. Sách đã tải về trên máy và tiến trình đọc cục bộ sẽ được giữ lại.")
+                    if (!authUiState.errorMessage.isNullOrBlank()) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = authUiState.errorMessage.orEmpty(),
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.deleteAccount() },
+                    enabled = !authUiState.isLoading,
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    if (authUiState.isLoading) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    } else {
+                        Text("Xác nhận xóa")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissDeleteAccount() }, enabled = !authUiState.isLoading) {
+                    Text("Hủy")
+                }
+            }
+        )
     }
 
     if (showResetDialog) {
