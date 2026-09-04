@@ -14,8 +14,11 @@ class Milestone7LocalImportTest {
 
     @Test
     fun `test duplicate exception message`() {
-        val exception = ImportException.DuplicateBook("Sách đã có trong thư viện")
-        assertEquals("Sách đã có trong thư viện", exception.message)
+        val exception = ImportException.DuplicateBook(
+            existingBookId = "imported_123",
+            existingTitle = "Sách đã có trong thư viện"
+        )
+        assertTrue(exception.message.contains("Sách đã có trong thư viện"))
     }
 
     @Test

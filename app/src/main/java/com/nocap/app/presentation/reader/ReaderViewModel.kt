@@ -41,13 +41,17 @@ import org.readium.r2.shared.publication.Publication
 import java.io.File
 import java.util.UUID
 
+import com.nocap.app.data.importer.FormatSniffer
+import com.nocap.app.domain.model.PublicationFormat
+
 sealed interface ReaderUiState {
     data object Loading : ReaderUiState
     data class Ready(
         val publication: Publication,
         val initialLocator: Locator?,
         val toc: List<TocItem>,
-        val bookTitle: String
+        val bookTitle: String,
+        val format: PublicationFormat = PublicationFormat.EPUB
     ) : ReaderUiState
     data object BookNotDownloaded : ReaderUiState
     data object FileNotFound : ReaderUiState
@@ -145,7 +149,7 @@ class ReaderViewModel(
             }
 
             val catalogBook = catalogRepository.getBookById(bookId)
-            val title = catalogBook?.title ?: "Ebook"
+            val title = catalogBook?.title ?: file.nameWithoutExtension.ifBlank { "Ebook" }
 
             val savedProgress = libraryRepository.observeBookProgress(bookId).first()
             val initialLocator = publicationManager.deserializeLocator(savedProgress?.locatorJson)
@@ -155,11 +159,13 @@ class ReaderViewModel(
                 currentPublication?.let { publicationManager.closePublication(it) }
                 currentPublication = publication
                 val toc = publicationManager.extractTableOfContents(publication)
+                val format = catalogBook?.format ?: FormatSniffer.sniff(file) ?: PublicationFormat.EPUB
                 _uiState.value = ReaderUiState.Ready(
                     publication = publication,
                     initialLocator = initialLocator,
                     toc = toc,
-                    bookTitle = title
+                    bookTitle = title,
+                    format = format
                 )
             }.onFailure { error ->
                 _uiState.value = ReaderUiState.Error(error.message ?: "Failed to open book")
@@ -272,7 +278,7 @@ class ReaderViewModel(
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 val db = AppDatabase.getInstance(context)
-                val catalogRepo = LocalCatalogRepository(db.progressDao())
+                val catalogRepo = LocalCatalogRepository(db.progressDao(), db.catalogDao())
                 val downloadRepo = LocalBookDownloadRepository(context, db.downloadDao(), db.catalogDao(), catalogRepo)
                 val favRepo = LocalFavoriteRepository(db.favoriteDao(), db.catalogDao(), catalogRepo)
                 val libraryRepo = LocalLibraryRepository(db.downloadDao(), db.progressDao(), db.favoriteDao(), db.catalogDao(), catalogRepo)

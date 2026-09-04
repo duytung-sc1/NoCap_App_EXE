@@ -18,5 +18,9 @@ data class CatalogBook(
     val entitlementType: EntitlementType = EntitlementType.FREE,
     val rating: Float = 0f,
     val publishedDate: String? = null,
-    val updatedAt: Long = System.currentTimeMillis()
+    val updatedAt: Long = System.currentTimeMillis(),
+    val format: PublicationFormat = PublicationFormat.EPUB,
+    val mediaType: String = PublicationFormat.EPUB.mediaType,
+    val sourceType: PublicationSourceType = PublicationSourceType.LOCAL_FILE,
+    val sourceUrl: String? = null
 )

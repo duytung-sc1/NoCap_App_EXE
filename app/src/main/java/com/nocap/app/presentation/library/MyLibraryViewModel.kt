@@ -11,11 +11,15 @@ import com.nocap.app.data.download.LocalBookDownloadRepository
 import com.nocap.app.data.favorite.LocalFavoriteRepository
 import com.nocap.app.data.importer.LocalImportBookRepository
 import com.nocap.app.data.library.LocalLibraryRepository
+import com.nocap.app.domain.model.DownloadProgress
 import com.nocap.app.domain.model.LibraryBook
+import com.nocap.app.domain.model.PublicationSource
 import com.nocap.app.domain.repository.BookDownloadRepository
 import com.nocap.app.domain.repository.FavoriteRepository
 import com.nocap.app.domain.repository.ImportBookRepository
+import com.nocap.app.domain.repository.ImportException
 import com.nocap.app.domain.repository.LibraryRepository
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -42,7 +46,13 @@ enum class LibrarySort(val displayName: String) {
 sealed interface LibraryEvent {
     data class ImportSuccess(val bookTitle: String) : LibraryEvent
     data class ShowMessage(val message: String) : LibraryEvent
+    data class DuplicateFound(val bookId: String, val title: String) : LibraryEvent
 }
+
+data class ImportState(
+    val isImporting: Boolean = false,
+    val progress: DownloadProgress? = null
+)
 
 data class MyLibraryUiState(
     val books: List<LibraryBook> = emptyList(),
@@ -50,7 +60,8 @@ data class MyLibraryUiState(
     val selectedFilter: LibraryFilter = LibraryFilter.ALL,
     val selectedSort: LibrarySort = LibrarySort.RECENTLY_READ,
     val isLoading: Boolean = true,
-    val isImporting: Boolean = false
+    val isImporting: Boolean = false,
+    val importProgress: DownloadProgress? = null
 )
 
 class MyLibraryViewModel(
@@ -63,7 +74,8 @@ class MyLibraryViewModel(
     private val _searchQuery = MutableStateFlow("")
     private val _selectedFilter = MutableStateFlow(LibraryFilter.ALL)
     private val _selectedSort = MutableStateFlow(LibrarySort.RECENTLY_READ)
-    private val _isImporting = MutableStateFlow(false)
+    private val _importState = MutableStateFlow(ImportState())
+    private var importJob: Job? = null
 
     private val _events = MutableSharedFlow<LibraryEvent>()
     val events: SharedFlow<LibraryEvent> = _events.asSharedFlow()
@@ -73,8 +85,8 @@ class MyLibraryViewModel(
         _searchQuery,
         _selectedFilter,
         _selectedSort,
-        _isImporting
-    ) { libraryBooks, query, filter, sort, isImporting ->
+        _importState
+    ) { libraryBooks, query, filter, sort, importState ->
         // 1. Search filter
         val searchFiltered = if (query.isBlank()) {
             libraryBooks
@@ -113,7 +125,8 @@ class MyLibraryViewModel(
             selectedFilter = filter,
             selectedSort = sort,
             isLoading = false,
-            isImporting = isImporting
+            isImporting = importState.isImporting,
+            importProgress = importState.progress
         )
     }.stateIn(
         viewModelScope,
@@ -151,17 +164,41 @@ class MyLibraryViewModel(
     }
 
     fun onImportEpub(uri: Uri) {
-        viewModelScope.launch {
-            _isImporting.value = true
-            val result = importRepository.importEpub(uri)
-            _isImporting.value = false
+        onImportPublication(PublicationSource.LocalUri(uri))
+    }
+
+    fun onImportPublication(source: PublicationSource) {
+        importJob?.cancel()
+        importJob = viewModelScope.launch {
+            _importState.value = ImportState(isImporting = true, progress = null)
+
+            val result = importRepository.importPublication(source) { progress ->
+                _importState.value = ImportState(isImporting = true, progress = progress)
+            }
+
+            _importState.value = ImportState(isImporting = false, progress = null)
 
             result.onSuccess {
                 _events.emit(LibraryEvent.ShowMessage("Nhập sách thành công!"))
             }.onFailure { error ->
-                _events.emit(LibraryEvent.ShowMessage(error.message ?: "Lỗi khi nhập sách"))
+                when (error) {
+                    is ImportException.DuplicateBook -> {
+                        _events.emit(LibraryEvent.DuplicateFound(error.existingBookId, error.existingTitle))
+                    }
+                    is ImportException.DownloadCancelled -> {
+                        _events.emit(LibraryEvent.ShowMessage("Đã hủy tải sách"))
+                    }
+                    else -> {
+                        _events.emit(LibraryEvent.ShowMessage(error.message ?: "Lỗi khi nhập sách"))
+                    }
+                }
             }
         }
+    }
+
+    fun cancelImport() {
+        importJob?.cancel()
+        _importState.value = ImportState(isImporting = false, progress = null)
     }
 
     fun onUpdateBook(bookId: String) {
@@ -182,7 +219,7 @@ class MyLibraryViewModel(
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
                     val db = AppDatabase.getInstance(context)
-                    val catalogRepo = LocalCatalogRepository(db.progressDao())
+                    val catalogRepo = LocalCatalogRepository(db.progressDao(), db.catalogDao())
                     val libraryRepo = LocalLibraryRepository(
                         downloadDao = db.downloadDao(),
                         progressDao = db.progressDao(),

@@ -27,7 +27,11 @@ fun CatalogBook.toEntity(): CatalogBookEntity = CatalogBookEntity(
     entitlementType = entitlementType,
     rating = rating,
     publishedDate = publishedDate,
-    updatedAt = updatedAt
+    updatedAt = updatedAt,
+    format = format,
+    mediaType = mediaType,
+    sourceType = sourceType,
+    sourceUrl = sourceUrl
 )
 
 fun CatalogBookEntity.toDomain(): CatalogBook = CatalogBook(
@@ -48,7 +52,11 @@ fun CatalogBookEntity.toDomain(): CatalogBook = CatalogBook(
     entitlementType = entitlementType,
     rating = rating,
     publishedDate = publishedDate,
-    updatedAt = updatedAt
+    updatedAt = updatedAt,
+    format = format,
+    mediaType = mediaType,
+    sourceType = sourceType,
+    sourceUrl = sourceUrl
 )
 
 fun Category.toEntity(): CategoryEntity = CategoryEntity(

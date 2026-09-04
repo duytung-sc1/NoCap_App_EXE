@@ -68,20 +68,30 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.FragmentContainerView
 import androidx.fragment.app.commit
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.delay
 import com.nocap.app.core.datastore.ReaderFontFamily
 import com.nocap.app.core.datastore.ReaderPreferences
 import com.nocap.app.core.datastore.ReaderTextAlignment
 import com.nocap.app.core.datastore.ReaderTheme
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import com.nocap.app.domain.model.Bookmark
+import com.nocap.app.domain.model.PublicationFormat
 import com.nocap.app.domain.model.TocItem
 import org.json.JSONObject
+import org.readium.adapter.pdfium.navigator.PdfiumEngineProvider
+import org.readium.r2.navigator.VisualNavigator
 import org.readium.r2.navigator.epub.EpubNavigatorFactory
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
+import org.readium.r2.navigator.pdf.PdfNavigatorFactory
+import org.readium.r2.navigator.pdf.PdfNavigatorFragment
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.util.Url
@@ -108,7 +118,7 @@ fun ReaderScreen(
     var showSettingsSheet by remember { mutableStateOf(false) }
     var showControls by remember { mutableStateOf(true) }
 
-    var navigatorFragment by remember { mutableStateOf<EpubNavigatorFragment?>(null) }
+    var navigatorFragment by remember { mutableStateOf<VisualNavigator?>(null) }
     var lastKnownLocator by remember { mutableStateOf<Locator?>(null) }
 
     // Dynamic reader theme colors
@@ -119,15 +129,15 @@ fun ReaderScreen(
     }
 
     val handleBack: () -> Unit = {
-        viewModel.saveCurrentLocationImmediately(lastKnownLocator ?: navigatorFragment?.currentLocator?.value)
+        viewModel.saveCurrentLocationImmediately(lastKnownLocator ?: runCatching { navigatorFragment?.currentLocator?.value }.getOrNull())
         onBackClick()
     }
 
     BackHandler(onBack = handleBack)
 
-    // Apply real-time preferences to Readium Navigator
+    // Apply real-time preferences to Readium Navigator (EPUB only)
     LaunchedEffect(preferences, navigatorFragment) {
-        navigatorFragment?.submitPreferences(preferences.toReadiumPreferences())
+        (navigatorFragment as? EpubNavigatorFragment)?.submitPreferences(preferences.toReadiumPreferences())
     }
 
     Scaffold(
@@ -246,22 +256,43 @@ fun ReaderScreen(
                     )
                 }
                 is ReaderUiState.Ready -> {
-                    EpubNavigatorContainer(
-                        bookId = bookId,
-                        publication = state.publication,
-                        initialLocator = state.initialLocator,
-                        initialPreferences = preferences.toReadiumPreferences(),
-                        onNavigatorReady = { nav ->
-                            navigatorFragment = nav
-                        }
-                    )
+                    if (state.format == PublicationFormat.PDF) {
+                        PdfNavigatorContainer(
+                            bookId = bookId,
+                            publication = state.publication,
+                            initialLocator = state.initialLocator,
+                            onNavigatorReady = { nav ->
+                                navigatorFragment = nav
+                            }
+                        )
+                    } else {
+                        EpubNavigatorContainer(
+                            bookId = bookId,
+                            publication = state.publication,
+                            initialLocator = state.initialLocator,
+                            initialPreferences = preferences.toReadiumPreferences(),
+                            onNavigatorReady = { nav ->
+                                navigatorFragment = nav
+                            }
+                        )
+                    }
 
                     // Track locator changes
                     LaunchedEffect(navigatorFragment) {
                         val nav = navigatorFragment ?: return@LaunchedEffect
-                        nav.currentLocator.collect { locator ->
-                            lastKnownLocator = locator
-                            viewModel.onLocationChanged(locator)
+                        val fragment = nav as? Fragment
+                        if (fragment != null) {
+                            while (!fragment.isAdded) {
+                                delay(50)
+                            }
+                        }
+                        try {
+                            nav.currentLocator.collect { locator ->
+                                lastKnownLocator = locator
+                                viewModel.onLocationChanged(locator)
+                            }
+                        } catch (_: IllegalStateException) {
+                            // Ignored if fragment detached
                         }
                     }
 
@@ -320,6 +351,7 @@ fun ReaderScreen(
                         ) {
                             ReaderSettingsSheetContent(
                                 preferences = preferences,
+                                format = state.format,
                                 onUpdateTheme = viewModel::updateTheme,
                                 onUpdateFontFamily = viewModel::updateFontFamily,
                                 onUpdateFontSize = viewModel::updateFontSize,
@@ -380,7 +412,68 @@ fun EpubNavigatorContainer(
                         replace(containerId, fragment, "epub_navigator_$bookId")
                     }
 
-                    onNavigatorReady(fragment)
+                    post {
+                        if (!activity.isFinishing && !activity.isDestroyed) {
+                            onNavigatorReady(fragment)
+                        }
+                    }
+                }
+            }
+        }
+    )
+}
+
+@Composable
+fun PdfNavigatorContainer(
+    bookId: String,
+    publication: Publication,
+    initialLocator: Locator?,
+    onNavigatorReady: (VisualNavigator) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val activity = LocalContext.current as? FragmentActivity
+    val containerId = remember(bookId) { View.generateViewId() }
+
+    DisposableEffect(bookId) {
+        onDispose {
+            activity?.let { act ->
+                val existing = act.supportFragmentManager.findFragmentByTag("pdf_navigator_$bookId")
+                if (existing != null) {
+                    act.supportFragmentManager.commit(allowStateLoss = true) {
+                        remove(existing)
+                    }
+                }
+            }
+        }
+    }
+
+    AndroidView(
+        modifier = modifier.fillMaxSize(),
+        factory = { ctx ->
+            FragmentContainerView(ctx).apply {
+                id = containerId
+                if (activity != null) {
+                    val factory = PdfNavigatorFactory(
+                        publication = publication,
+                        pdfEngineProvider = PdfiumEngineProvider()
+                    )
+                    activity.supportFragmentManager.fragmentFactory = factory.createFragmentFactory(
+                        initialLocator = initialLocator
+                    )
+                    val fragment = activity.supportFragmentManager.fragmentFactory.instantiate(
+                        activity.classLoader,
+                        PdfNavigatorFragment::class.java.name
+                    ) as VisualNavigator
+
+                    activity.supportFragmentManager.commit(allowStateLoss = true) {
+                        replace(containerId, fragment as Fragment, "pdf_navigator_$bookId")
+                    }
+
+                    post {
+                        if (!activity.isFinishing && !activity.isDestroyed) {
+                            onNavigatorReady(fragment)
+                        }
+                    }
                 }
             }
         }
@@ -390,6 +483,7 @@ fun EpubNavigatorContainer(
 @Composable
 fun ReaderSettingsSheetContent(
     preferences: ReaderPreferences,
+    format: PublicationFormat = PublicationFormat.EPUB,
     onUpdateTheme: (ReaderTheme) -> Unit,
     onUpdateFontFamily: (ReaderFontFamily) -> Unit,
     onUpdateFontSize: (Float) -> Unit,
@@ -442,107 +536,137 @@ fun ReaderSettingsSheetContent(
             )
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
-        HorizontalDivider()
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // 2. Font Size Controls
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Cỡ chữ", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedButton(
-                    onClick = { onUpdateFontSize((preferences.fontSizeMultiplier - 0.1f).coerceIn(0.8f, 2.0f)) },
-                    shape = CircleShape,
-                    modifier = Modifier.size(40.dp),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+        if (format == PublicationFormat.PDF) {
+            Spacer(modifier = Modifier.height(20.dp))
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                ),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("A-", fontWeight = FontWeight.Bold)
-                }
-                Spacer(modifier = Modifier.width(16.dp))
-                Text(
-                    text = "${(preferences.fontSizeMultiplier * 100).toInt()}%",
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.width(50.dp),
-                    textAlign = TextAlign.Center
-                )
-                Spacer(modifier = Modifier.width(16.dp))
-                OutlinedButton(
-                    onClick = { onUpdateFontSize((preferences.fontSizeMultiplier + 0.1f).coerceIn(0.8f, 2.0f)) },
-                    shape = CircleShape,
-                    modifier = Modifier.size(40.dp),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
-                ) {
-                    Text("A+", fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // 3. Font Family Selection
-        Text("Kiểu chữ", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            FilterChip(
-                selected = preferences.fontFamily == ReaderFontFamily.SYSTEM_DEFAULT,
-                onClick = { onUpdateFontFamily(ReaderFontFamily.SYSTEM_DEFAULT) },
-                label = { Text("Mặc định") }
-            )
-            FilterChip(
-                selected = preferences.fontFamily == ReaderFontFamily.SERIF,
-                onClick = { onUpdateFontFamily(ReaderFontFamily.SERIF) },
-                label = { Text("Serif", fontFamily = FontFamily.Serif) }
-            )
-            FilterChip(
-                selected = preferences.fontFamily == ReaderFontFamily.SANS_SERIF,
-                onClick = { onUpdateFontFamily(ReaderFontFamily.SANS_SERIF) },
-                label = { Text("Sans-Serif", fontFamily = FontFamily.SansSerif) }
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // 4. Line Spacing & Alignment
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text("Căn lề", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = preferences.textAlignment == ReaderTextAlignment.START,
-                        onClick = { onUpdateTextAlignment(ReaderTextAlignment.START) },
-                        label = { Text("Trái") }
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
                     )
-                    FilterChip(
-                        selected = preferences.textAlignment == ReaderTextAlignment.JUSTIFY,
-                        onClick = { onUpdateTextAlignment(ReaderTextAlignment.JUSTIFY) },
-                        label = { Text("Đều") }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = "Tài liệu PDF có định dạng bố cục cố định. Cỡ chữ, phông chữ và căn lề không áp dụng. Bạn có thể phóng to / thu nhỏ bằng cử chỉ hai ngón tay (pinch-to-zoom).",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
+            Spacer(modifier = Modifier.height(24.dp))
+        } else {
+            Spacer(modifier = Modifier.height(20.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(16.dp))
 
-            Column(horizontalAlignment = Alignment.End) {
-                Text("Cuộn dọc", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(modifier = Modifier.height(6.dp))
-                Switch(
-                    checked = preferences.isScrollMode,
-                    onCheckedChange = onUpdateScrollMode
+            // 2. Font Size Controls
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Cỡ chữ", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedButton(
+                        onClick = { onUpdateFontSize((preferences.fontSizeMultiplier - 0.1f).coerceIn(0.8f, 2.0f)) },
+                        shape = CircleShape,
+                        modifier = Modifier.size(40.dp),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+                    ) {
+                        Text("A-", fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Text(
+                        text = "${(preferences.fontSizeMultiplier * 100).toInt()}%",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.width(50.dp),
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.width(16.dp))
+                    OutlinedButton(
+                        onClick = { onUpdateFontSize((preferences.fontSizeMultiplier + 0.1f).coerceIn(0.8f, 2.0f)) },
+                        shape = CircleShape,
+                        modifier = Modifier.size(40.dp),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+                    ) {
+                        Text("A+", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 3. Font Family Selection
+            Text("Kiểu chữ", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = preferences.fontFamily == ReaderFontFamily.SYSTEM_DEFAULT,
+                    onClick = { onUpdateFontFamily(ReaderFontFamily.SYSTEM_DEFAULT) },
+                    label = { Text("Mặc định") }
+                )
+                FilterChip(
+                    selected = preferences.fontFamily == ReaderFontFamily.SERIF,
+                    onClick = { onUpdateFontFamily(ReaderFontFamily.SERIF) },
+                    label = { Text("Serif", fontFamily = FontFamily.Serif) }
+                )
+                FilterChip(
+                    selected = preferences.fontFamily == ReaderFontFamily.SANS_SERIF,
+                    onClick = { onUpdateFontFamily(ReaderFontFamily.SANS_SERIF) },
+                    label = { Text("Sans-Serif", fontFamily = FontFamily.SansSerif) }
                 )
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 4. Line Spacing & Alignment
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text("Căn lề", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = preferences.textAlignment == ReaderTextAlignment.START,
+                            onClick = { onUpdateTextAlignment(ReaderTextAlignment.START) },
+                            label = { Text("Trái") }
+                        )
+                        FilterChip(
+                            selected = preferences.textAlignment == ReaderTextAlignment.JUSTIFY,
+                            onClick = { onUpdateTextAlignment(ReaderTextAlignment.JUSTIFY) },
+                            label = { Text("Đều") }
+                        )
+                    }
+                }
+
+                Column(horizontalAlignment = Alignment.End) {
+                    Text("Cuộn dọc", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Switch(
+                        checked = preferences.isScrollMode,
+                        onCheckedChange = onUpdateScrollMode
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(24.dp))
         }
-        Spacer(modifier = Modifier.height(24.dp))
     }
 }
 

@@ -22,7 +22,8 @@ import kotlinx.coroutines.flow.map
  * used as a cache layer in the networking milestone when the remote API is integrated.
  */
 class LocalCatalogRepository(
-    private val progressDao: com.nocap.app.core.database.dao.ProgressDao? = null
+    private val progressDao: com.nocap.app.core.database.dao.ProgressDao? = null,
+    private val catalogDao: com.nocap.app.core.database.dao.CatalogDao? = null
 ) : CatalogRepository {
 
     private val _allBooks = MutableStateFlow(SeedCatalogDataSource.books)
@@ -75,5 +76,5 @@ class LocalCatalogRepository(
         }
 
     override suspend fun getBookById(bookId: String): CatalogBook? =
-        _allBooks.value.find { it.id == bookId }
+        catalogDao?.getBookById(bookId)?.toDomain() ?: _allBooks.value.find { it.id == bookId }
 }

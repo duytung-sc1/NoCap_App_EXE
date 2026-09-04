@@ -56,5 +56,13 @@ data class CatalogBookEntity(
     @ColumnInfo(name = "published_date")
     val publishedDate: String? = null,
     @ColumnInfo(name = "updated_at")
-    val updatedAt: Long = System.currentTimeMillis()
+    val updatedAt: Long = System.currentTimeMillis(),
+    @ColumnInfo(name = "format", defaultValue = "EPUB")
+    val format: com.nocap.app.domain.model.PublicationFormat = com.nocap.app.domain.model.PublicationFormat.EPUB,
+    @ColumnInfo(name = "media_type", defaultValue = "application/epub+zip")
+    val mediaType: String = "application/epub+zip",
+    @ColumnInfo(name = "source_type", defaultValue = "LOCAL_FILE")
+    val sourceType: com.nocap.app.domain.model.PublicationSourceType = com.nocap.app.domain.model.PublicationSourceType.LOCAL_FILE,
+    @ColumnInfo(name = "source_url")
+    val sourceUrl: String? = null
 )

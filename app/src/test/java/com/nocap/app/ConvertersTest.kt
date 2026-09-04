@@ -39,4 +39,34 @@ class ConvertersTest {
         val deserialized = converters.toDownloadStatus("INVALID_STATUS")
         assertEquals(DownloadStatus.PENDING, deserialized)
     }
+
+    @Test
+    fun `test PublicationFormat converter serialization and deserialization`() {
+        com.nocap.app.domain.model.PublicationFormat.entries.forEach { format ->
+            val serialized = converters.fromPublicationFormat(format)
+            val deserialized = converters.toPublicationFormat(serialized)
+            assertEquals(format, deserialized)
+        }
+    }
+
+    @Test
+    fun `test PublicationFormat converter unknown string defaults to EPUB`() {
+        val deserialized = converters.toPublicationFormat("UNKNOWN_FORMAT")
+        assertEquals(com.nocap.app.domain.model.PublicationFormat.EPUB, deserialized)
+    }
+
+    @Test
+    fun `test PublicationSourceType converter serialization and deserialization`() {
+        com.nocap.app.domain.model.PublicationSourceType.entries.forEach { source ->
+            val serialized = converters.fromPublicationSourceType(source)
+            val deserialized = converters.toPublicationSourceType(serialized)
+            assertEquals(source, deserialized)
+        }
+    }
+
+    @Test
+    fun `test PublicationSourceType converter unknown string defaults to LOCAL_FILE`() {
+        val deserialized = converters.toPublicationSourceType("UNKNOWN_SOURCE")
+        assertEquals(com.nocap.app.domain.model.PublicationSourceType.LOCAL_FILE, deserialized)
+    }
 }

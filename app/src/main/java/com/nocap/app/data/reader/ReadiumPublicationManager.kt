@@ -3,13 +3,14 @@ package com.nocap.app.data.reader
 import android.content.Context
 import com.nocap.app.domain.model.TocItem
 import org.json.JSONObject
+import org.readium.adapter.pdfium.document.PdfiumDocumentFactory
 import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.util.asset.AssetRetriever
 import org.readium.r2.shared.util.http.DefaultHttpClient
 import org.readium.r2.streamer.PublicationOpener
-import org.readium.r2.streamer.parser.epub.EpubParser
+import org.readium.r2.streamer.parser.DefaultPublicationParser
 import java.io.File
 import java.io.FileNotFoundException
 
@@ -24,8 +25,17 @@ class ReadiumPublicationManager(
         AssetRetriever(context.contentResolver, httpClient)
     }
 
+    private val publicationParser by lazy {
+        DefaultPublicationParser(
+            context = context,
+            httpClient = httpClient,
+            assetRetriever = assetRetriever,
+            pdfFactory = PdfiumDocumentFactory(context)
+        )
+    }
+
     private val publicationOpener by lazy {
-        PublicationOpener(publicationParser = EpubParser())
+        PublicationOpener(publicationParser = publicationParser)
     }
 
     suspend fun openPublication(file: File): Result<Publication> {
@@ -42,7 +52,7 @@ class ReadiumPublicationManager(
         val pubResult = publicationOpener.open(asset = asset, allowUserInteraction = false)
         val publication = pubResult.getOrNull()
             ?: return Result.failure(
-                IllegalStateException("Failed to parse EPUB publication: ${pubResult.failureOrNull()?.message}")
+                IllegalStateException("Failed to parse publication: ${pubResult.failureOrNull()?.message}")
             )
 
         return Result.success(publication)

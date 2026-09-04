@@ -44,6 +44,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -55,7 +56,10 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import com.nocap.app.domain.model.PublicationFormat
+import com.nocap.app.domain.model.PublicationSource
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -90,12 +94,17 @@ fun LibraryScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     var bookToDelete by remember { mutableStateOf<LibraryBook?>(null) }
+    var showImportSourceSheet by remember { mutableStateOf(false) }
+    var showUrlInputDialog by remember { mutableStateOf(false) }
+    var duplicateBookDialog by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var inputUrl by remember { mutableStateOf("") }
+    var inputUrlError by remember { mutableStateOf<String?>(null) }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) {
-            viewModel.onImportEpub(uri)
+            viewModel.onImportPublication(PublicationSource.LocalUri(uri))
         }
     }
 
@@ -107,6 +116,9 @@ fun LibraryScreen(
                 }
                 is LibraryEvent.ShowMessage -> {
                     snackbarHostState.showSnackbar(event.message)
+                }
+                is LibraryEvent.DuplicateFound -> {
+                    duplicateBookDialog = event.bookId to event.title
                 }
             }
         }
@@ -124,15 +136,11 @@ fun LibraryScreen(
                 },
                 actions = {
                     IconButton(
-                        onClick = {
-                            filePickerLauncher.launch(
-                                arrayOf("application/epub+zip", "application/octet-stream", "*/*")
-                            )
-                        }
+                        onClick = { showImportSourceSheet = true }
                     ) {
                         Icon(
                             imageVector = Icons.Default.Add,
-                            contentDescription = "Nhập sách EPUB"
+                            contentDescription = "Thêm sách"
                         )
                     }
                 },
@@ -143,13 +151,9 @@ fun LibraryScreen(
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
-                onClick = {
-                    filePickerLauncher.launch(
-                        arrayOf("application/epub+zip", "application/octet-stream", "*/*")
-                    )
-                },
+                onClick = { showImportSourceSheet = true },
                 icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text("Nhập EPUB") },
+                text = { Text("Thêm sách") },
                 containerColor = MaterialTheme.colorScheme.primaryContainer,
                 contentColor = MaterialTheme.colorScheme.onPrimaryContainer
             )
@@ -208,22 +212,65 @@ fun LibraryScreen(
 
             // Importing indicator
             if (uiState.isImporting) {
-                Box(
+                Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                    ),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                        Text(
-                            text = "Đang xử lý và kiểm tra file EPUB...",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                        val progress = uiState.importProgress
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (progress != null) "Đang tải sách..." else "Đang kiểm tra và nhập sách...",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            TextButton(
+                                onClick = viewModel::cancelImport
+                            ) {
+                                Text("Hủy", color = MaterialTheme.colorScheme.error)
+                            }
+                        }
+
+                        if (progress != null) {
+                            val mbRead = "%.1f".format(progress.bytesRead / (1024f * 1024f))
+                            if (progress.totalBytes > 0) {
+                                val mbTotal = "%.1f".format(progress.totalBytes / (1024f * 1024f))
+                                val pct = ((progress.percentage ?: 0f) * 100).toInt()
+                                LinearProgressIndicator(
+                                    progress = { progress.percentage ?: 0f },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Text(
+                                    text = "$mbRead MB / $mbTotal MB ($pct%)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            } else {
+                                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                                Text(
+                                    text = "$mbRead MB",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        } else {
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        }
                     }
                 }
             }
@@ -240,11 +287,7 @@ fun LibraryScreen(
                 EmptyLibraryView(
                     searchQuery = uiState.searchQuery,
                     onNavigateToDiscover = onNavigateToDiscover,
-                    onImportClick = {
-                        filePickerLauncher.launch(
-                            arrayOf("application/epub+zip", "application/octet-stream", "*/*")
-                        )
-                    }
+                    onImportClick = { showImportSourceSheet = true }
                 )
             } else {
                 LazyColumn(
@@ -257,7 +300,10 @@ fun LibraryScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    items(uiState.books, key = { it.book.id }) { libraryBook ->
+                    items(
+                        items = uiState.books,
+                        key = { it.book.id }
+                    ) { libraryBook ->
                         LibraryBookItem(
                             libraryBook = libraryBook,
                             onBookClick = {
@@ -277,6 +323,189 @@ fun LibraryScreen(
                 }
             }
         }
+    }
+
+    // Import Source Selection Sheet
+    if (showImportSourceSheet) {
+        val sheetState = rememberModalBottomSheetState()
+        ModalBottomSheet(
+            onDismissRequest = { showImportSourceSheet = false },
+            sheetState = sheetState
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 16.dp)
+            ) {
+                Text(
+                    text = "Thêm sách mới",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Option 1: Local Device File
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            showImportSourceSheet = false
+                            filePickerLauncher.launch(
+                                arrayOf("application/epub+zip", "application/pdf", "application/octet-stream", "*/*")
+                            )
+                        },
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = AppIcons.Book,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column {
+                            Text(
+                                text = "Từ thiết bị",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Chọn tệp EPUB hoặc PDF có sẵn trên máy",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Option 2: Remote HTTPS Link
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            showImportSourceSheet = false
+                            inputUrl = ""
+                            inputUrlError = null
+                            showUrlInputDialog = true
+                        },
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column {
+                            Text(
+                                text = "Từ liên kết HTTPS",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Tải sách trực tiếp từ liên kết mạng an toàn",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+        }
+    }
+
+    // URL Input Dialog
+    if (showUrlInputDialog) {
+        AlertDialog(
+            onDismissRequest = { showUrlInputDialog = false },
+            title = { Text("Nhập sách từ liên kết") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Nhập liên kết tải sách trực tiếp (.epub hoặc .pdf). Chỉ hỗ trợ giao thức bảo mật HTTPS.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    TextField(
+                        value = inputUrl,
+                        onValueChange = {
+                            inputUrl = it
+                            inputUrlError = null
+                        },
+                        placeholder = { Text("https://example.com/book.epub") },
+                        singleLine = true,
+                        isError = inputUrlError != null,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (inputUrlError != null) {
+                        Text(
+                            text = inputUrlError!!,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val trimmed = inputUrl.trim()
+                        if (!trimmed.startsWith("https://", ignoreCase = true)) {
+                            inputUrlError = "Chỉ chấp nhận liên kết bắt đầu bằng https://"
+                        } else {
+                            showUrlInputDialog = false
+                            viewModel.onImportPublication(PublicationSource.RemoteUrl(trimmed))
+                        }
+                    }
+                ) {
+                    Text("Tải về")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUrlInputDialog = false }) {
+                    Text("Hủy")
+                }
+            }
+        )
+    }
+
+    // Duplicate Book Dialog
+    duplicateBookDialog?.let { (dupId, dupTitle) ->
+        AlertDialog(
+            onDismissRequest = { duplicateBookDialog = null },
+            title = { Text("Sách đã có trong thư viện") },
+            text = {
+                Text("Cuốn sách \"$dupTitle\" đã tồn tại trong thư viện của bạn.")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        duplicateBookDialog = null
+                        onReadBookClick(dupId)
+                    }
+                ) {
+                    Text("Mở sách")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { duplicateBookDialog = null }) {
+                    Text("Đóng")
+                }
+            }
+        )
     }
 
     // Confirmation Dialog for Deleting Imported Book
@@ -484,6 +713,28 @@ private fun LibraryBookItem(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.padding(top = 4.dp)
                 ) {
+                    // Format Badge
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = when (libraryBook.book.format) {
+                            PublicationFormat.PDF -> MaterialTheme.colorScheme.errorContainer
+                            PublicationFormat.EPUB -> MaterialTheme.colorScheme.primaryContainer
+                            PublicationFormat.CBZ -> MaterialTheme.colorScheme.tertiaryContainer
+                        }
+                    ) {
+                        Text(
+                            text = libraryBook.book.format.name,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = when (libraryBook.book.format) {
+                                PublicationFormat.PDF -> MaterialTheme.colorScheme.onErrorContainer
+                                PublicationFormat.EPUB -> MaterialTheme.colorScheme.onPrimaryContainer
+                                PublicationFormat.CBZ -> MaterialTheme.colorScheme.onTertiaryContainer
+                            },
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+
                     if (isImported) {
                         Surface(
                             shape = RoundedCornerShape(4.dp),

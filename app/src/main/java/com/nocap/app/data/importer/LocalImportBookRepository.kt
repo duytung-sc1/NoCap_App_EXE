@@ -12,12 +12,16 @@ import com.nocap.app.core.database.entity.CatalogBookEntity
 import com.nocap.app.core.database.entity.CategoryEntity
 import com.nocap.app.core.database.entity.DownloadedBookEntity
 import com.nocap.app.data.reader.ReadiumPublicationManager
+import com.nocap.app.domain.model.DownloadProgress
 import com.nocap.app.domain.model.DownloadStatus
+import com.nocap.app.domain.model.PublicationFormat
+import com.nocap.app.domain.model.PublicationSource
 import com.nocap.app.domain.repository.ImportBookRepository
 import com.nocap.app.domain.repository.ImportException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.security.MessageDigest
 import java.util.UUID
@@ -29,81 +33,124 @@ class LocalImportBookRepository(
     private val progressDao: ProgressDao,
     private val bookmarkDao: BookmarkDao,
     private val favoriteDao: FavoriteDao,
-    private val publicationManager: ReadiumPublicationManager = ReadiumPublicationManager(context)
+    private val publicationManager: ReadiumPublicationManager = ReadiumPublicationManager(context),
+    private val remoteDownloader: RemotePublicationDownloader = RemotePublicationDownloader(context)
 ) : ImportBookRepository {
 
-    override suspend fun importEpub(uri: Uri): Result<String> = withContext(Dispatchers.IO) {
-        val originalFilename = queryFilename(uri) ?: "imported_${System.currentTimeMillis()}.epub"
-        val tempFile = File(context.cacheDir, "import_temp_${UUID.randomUUID()}.epub")
+    override suspend fun importEpub(uri: Uri): Result<String> {
+        return importPublication(PublicationSource.LocalUri(uri))
+    }
 
+    override suspend fun importPublication(
+        source: PublicationSource,
+        onProgress: ((DownloadProgress) -> Unit)?
+    ): Result<String> = withContext(Dispatchers.IO) {
+        var tempFile: File? = null
         try {
-            // 1. Stream copy and compute SHA-256 simultaneously
-            val digest = MessageDigest.getInstance("SHA-256")
-            val inputStream = context.contentResolver.openInputStream(uri)
-                ?: return@withContext Result.failure(ImportException.StorageError("Không thể mở tệp từ nguồn được chọn"))
+            var suggestedFilename: String? = null
+            var sourceMimeType: String? = null
 
-            inputStream.use { input ->
-                FileOutputStream(tempFile).use { output ->
-                    val buffer = ByteArray(8192)
-                    var bytesRead: Int
-                    while (input.read(buffer).also { bytesRead = it } != -1) {
-                        output.write(buffer, 0, bytesRead)
-                        digest.update(buffer, 0, bytesRead)
-                    }
-                    output.flush()
+            when (source) {
+                is PublicationSource.LocalUri -> {
+                    suggestedFilename = source.displayNameHint ?: queryFilename(source.uri)
+                    tempFile = copyUriToTemp(source.uri, suggestedFilename, onProgress)
+                }
+                is PublicationSource.SharedUri -> {
+                    suggestedFilename = queryFilename(source.uri)
+                    sourceMimeType = source.mimeType
+                    tempFile = copyUriToTemp(source.uri, suggestedFilename, onProgress)
+                }
+                is PublicationSource.RemoteUrl -> {
+                    val downloadRes = remoteDownloader.download(source.url, onProgress).getOrThrow()
+                    tempFile = downloadRes.tempFile
+                    suggestedFilename = downloadRes.suggestedFilename
+                    sourceMimeType = downloadRes.contentType
+                }
+                is PublicationSource.SharedUrl -> {
+                    val downloadRes = remoteDownloader.download(source.url, onProgress).getOrThrow()
+                    tempFile = downloadRes.tempFile
+                    suggestedFilename = downloadRes.suggestedFilename
+                    sourceMimeType = downloadRes.contentType
                 }
             }
 
-            if (tempFile.length() == 0L) {
+            if (!tempFile.exists() || tempFile.length() == 0L) {
                 tempFile.delete()
-                return@withContext Result.failure(ImportException.InvalidEpub("Tệp EPUB trống"))
+                return@withContext Result.failure(ImportException.FileNotFound("Tệp trống hoặc không thể đọc"))
             }
 
-            val sha256 = digest.digest().joinToString("") { "%02x".format(it) }
+            // 1. Calculate SHA-256
+            val sha256 = calculateSha256(tempFile)
 
-            // 2. Check for duplicates
+            // 2. Cross-source duplicate detection
             val existingBook = catalogDao.getBookByHash(sha256)
                 ?: downloadDao.getDownloadByHash(sha256)?.let { catalogDao.getBookById(it.bookId) }
 
             if (existingBook != null) {
                 tempFile.delete()
-                return@withContext Result.failure(ImportException.DuplicateBook("Sách \"${existingBook.title}\" đã có trong thư viện"))
+                return@withContext Result.failure(
+                    ImportException.DuplicateBook(
+                        existingBookId = existingBook.id,
+                        existingTitle = existingBook.title
+                    )
+                )
             }
 
-            // 3. Validate EPUB with Readium
+            // 3. Sniff format
+            val format = FormatSniffer.sniff(tempFile)
+                ?: FormatSniffer.sniffFromExtension(suggestedFilename ?: "")
+                ?: FormatSniffer.sniffFromMimeType(sourceMimeType)
+
+            if (format == null) {
+                tempFile.delete()
+                return@withContext Result.failure(
+                    ImportException.UnsupportedFormat("Định dạng tệp không được hỗ trợ. Chỉ hỗ trợ sách EPUB và tài liệu PDF.")
+                )
+            }
+
+            if (format == PublicationFormat.CBZ) {
+                tempFile.delete()
+                return@withContext Result.failure(
+                    ImportException.UnsupportedFormat("Định dạng Comic Book Archive (CBZ) chưa được hỗ trợ trong phiên bản này.")
+                )
+            }
+
+            // 4. Validate with Readium
             val publicationResult = publicationManager.openPublication(tempFile)
             if (publicationResult.isFailure) {
                 tempFile.delete()
                 return@withContext Result.failure(
-                    ImportException.InvalidEpub("Tệp không phải là định dạng EPUB hợp lệ hoặc đã bị lỗi")
+                    if (format == PublicationFormat.PDF) {
+                        ImportException.CorruptPdf("Tệp PDF bị lỗi hoặc không thể phân tích cú pháp")
+                    } else {
+                        ImportException.InvalidEpub("Tệp không phải là định dạng EPUB hợp lệ hoặc đã bị lỗi")
+                    }
                 )
             }
 
             val publication = publicationResult.getOrThrow()
             val rawTitle = publication.metadata.title
-            val title = if (!rawTitle.isNullOrBlank()) {
-                rawTitle
-            } else {
-                originalFilename.substringBeforeLast(".").ifBlank { "Sách chưa đặt tên" }
-            }
+            val fallbackTitle = (suggestedFilename ?: "imported_${System.currentTimeMillis()}")
+                .substringBeforeLast(".")
+                .ifBlank { "Tài liệu chưa đặt tên" }
 
+            val title = if (!rawTitle.isNullOrBlank()) rawTitle else fallbackTitle
             val author = publication.metadata.authors.firstOrNull()?.name?.ifBlank { null }
                 ?: "Tác giả chưa xác định"
-
             val description = publication.metadata.description ?: ""
 
             publicationManager.closePublication(publication)
 
-            // 4. Move to permanent app-private directory
+            // 5. Atomic move to permanent directory
             val importedDir = File(context.filesDir, "imported").apply { if (!exists()) mkdirs() }
             val bookId = "imported_${sha256.take(12)}"
-            val finalFile = File(importedDir, "$bookId.epub")
+            val ext = FormatSniffer.extensionFor(format)
+            val finalFile = File(importedDir, "$bookId.$ext")
 
             if (finalFile.exists()) {
                 finalFile.delete()
             }
             if (!tempFile.renameTo(finalFile)) {
-                // Fallback copy if rename across filesystems fails
                 tempFile.inputStream().use { input ->
                     finalFile.outputStream().use { output ->
                         input.copyTo(output)
@@ -112,7 +159,7 @@ class LocalImportBookRepository(
                 tempFile.delete()
             }
 
-            // 5. Ensure "imported" category exists
+            // 6. Ensure "imported" category exists
             val existingCategory = catalogDao.getCategoryById("imported")
             if (existingCategory == null) {
                 catalogDao.insertCategories(
@@ -126,7 +173,13 @@ class LocalImportBookRepository(
                 )
             }
 
-            // 6. Save to Room database
+            val sourceUrl = when (source) {
+                is PublicationSource.RemoteUrl -> source.url
+                is PublicationSource.SharedUrl -> source.url
+                else -> null
+            }
+
+            // 7. Save to Room database
             val catalogEntity = CatalogBookEntity(
                 id = bookId,
                 title = title,
@@ -143,7 +196,11 @@ class LocalImportBookRepository(
                 isPremium = false,
                 rating = 0f,
                 publishedDate = null,
-                updatedAt = System.currentTimeMillis()
+                updatedAt = System.currentTimeMillis(),
+                format = format,
+                mediaType = FormatSniffer.mimeTypeFor(format),
+                sourceType = source.sourceType,
+                sourceUrl = sourceUrl
             )
 
             val downloadEntity = DownloadedBookEntity(
@@ -163,8 +220,12 @@ class LocalImportBookRepository(
 
             Result.success(bookId)
         } catch (e: Exception) {
-            tempFile.delete()
-            Result.failure(ImportException.GeneralError("Lỗi khi nhập sách: ${e.localizedMessage ?: "Không xác định"}"))
+            tempFile?.delete()
+            if (e is ImportException) {
+                Result.failure(e)
+            } else {
+                Result.failure(ImportException.GeneralError("Lỗi khi nhập sách: ${e.localizedMessage ?: "Không xác định"}"))
+            }
         }
     }
 
@@ -186,6 +247,59 @@ class LocalImportBookRepository(
 
             Unit
         }
+    }
+
+    private fun copyUriToTemp(
+        uri: Uri,
+        suggestedFilename: String?,
+        onProgress: ((DownloadProgress) -> Unit)?
+    ): File {
+        val tempFile = File(context.cacheDir, "import_temp_${UUID.randomUUID()}.tmp")
+        val inputStream = context.contentResolver.openInputStream(uri)
+            ?: throw ImportException.StorageError("Không thể mở tệp từ nguồn được chọn")
+
+        val totalBytes = runCatching {
+            context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L
+        }.getOrDefault(-1L)
+
+        var copiedBytes = 0L
+        val buffer = ByteArray(8192)
+
+        inputStream.use { input ->
+            FileOutputStream(tempFile).use { output ->
+                var bytesRead: Int
+                while (input.read(buffer).also { bytesRead = it } != -1) {
+                    copiedBytes += bytesRead
+                    if (copiedBytes > RemotePublicationDownloader.MAX_FILE_SIZE_BYTES) {
+                        output.flush()
+                        tempFile.delete()
+                        throw ImportException.FileSizeLimitExceeded()
+                    }
+                    output.write(buffer, 0, bytesRead)
+
+                    onProgress?.invoke(
+                        DownloadProgress(
+                            bytesRead = copiedBytes,
+                            totalBytes = if (totalBytes > 0) totalBytes else -1L
+                        )
+                    )
+                }
+                output.flush()
+            }
+        }
+        return tempFile
+    }
+
+    private fun calculateSha256(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        FileInputStream(file).use { input ->
+            val buffer = ByteArray(8192)
+            var bytesRead: Int
+            while (input.read(buffer).also { bytesRead = it } != -1) {
+                digest.update(buffer, 0, bytesRead)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
     private fun queryFilename(uri: Uri): String? {
