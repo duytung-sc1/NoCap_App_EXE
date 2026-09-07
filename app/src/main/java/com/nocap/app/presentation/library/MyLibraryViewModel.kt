@@ -6,7 +6,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.nocap.app.core.database.AppDatabase
+import com.nocap.app.core.database.dao.CollectionWithBookCount
+import com.nocap.app.core.database.entity.CollectionEntity
 import com.nocap.app.data.catalog.LocalCatalogRepository
+import com.nocap.app.data.collection.LocalCollectionRepository
 import com.nocap.app.data.download.LocalBookDownloadRepository
 import com.nocap.app.data.favorite.LocalFavoriteRepository
 import com.nocap.app.data.importer.LocalImportBookRepository
@@ -15,11 +18,13 @@ import com.nocap.app.domain.model.DownloadProgress
 import com.nocap.app.domain.model.LibraryBook
 import com.nocap.app.domain.model.PublicationSource
 import com.nocap.app.domain.repository.BookDownloadRepository
+import com.nocap.app.domain.repository.CollectionRepository
 import com.nocap.app.domain.repository.FavoriteRepository
 import com.nocap.app.domain.repository.ImportBookRepository
 import com.nocap.app.domain.repository.ImportException
 import com.nocap.app.domain.repository.LibraryRepository
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -30,6 +35,11 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+enum class LibraryTab(val displayName: String) {
+    BOOKS("Sách"),
+    COLLECTIONS("Bộ sưu tập")
+}
 
 enum class LibraryFilter(val displayName: String) {
     ALL("Tất cả"),
@@ -55,7 +65,9 @@ data class ImportState(
 )
 
 data class MyLibraryUiState(
+    val selectedTab: LibraryTab = LibraryTab.BOOKS,
     val books: List<LibraryBook> = emptyList(),
+    val collections: List<CollectionWithBookCount> = emptyList(),
     val searchQuery: String = "",
     val selectedFilter: LibraryFilter = LibraryFilter.ALL,
     val selectedSort: LibrarySort = LibrarySort.RECENTLY_READ,
@@ -68,9 +80,11 @@ class MyLibraryViewModel(
     private val libraryRepository: LibraryRepository,
     private val downloadRepository: BookDownloadRepository,
     private val favoriteRepository: FavoriteRepository,
-    private val importRepository: ImportBookRepository
+    private val importRepository: ImportBookRepository,
+    private val collectionRepository: CollectionRepository
 ) : ViewModel() {
 
+    private val _selectedTab = MutableStateFlow(LibraryTab.BOOKS)
     private val _searchQuery = MutableStateFlow("")
     private val _selectedFilter = MutableStateFlow(LibraryFilter.ALL)
     private val _selectedSort = MutableStateFlow(LibrarySort.RECENTLY_READ)
@@ -80,14 +94,19 @@ class MyLibraryViewModel(
     private val _events = MutableSharedFlow<LibraryEvent>()
     val events: SharedFlow<LibraryEvent> = _events.asSharedFlow()
 
-    val uiState: StateFlow<MyLibraryUiState> = combine(
+    val collections: StateFlow<List<CollectionWithBookCount>> = collectionRepository.observeCollections()
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5_000),
+            emptyList()
+        )
+
+    private val filteredBooks: Flow<List<LibraryBook>> = combine(
         libraryRepository.observeLibraryBooks(),
         _searchQuery,
         _selectedFilter,
-        _selectedSort,
-        _importState
-    ) { libraryBooks, query, filter, sort, importState ->
-        // 1. Search filter
+        _selectedSort
+    ) { libraryBooks, query, filter, sort ->
         val searchFiltered = if (query.isBlank()) {
             libraryBooks
         } else {
@@ -97,7 +116,6 @@ class MyLibraryViewModel(
             }
         }
 
-        // 2. Category / status filter
         val statusFiltered = when (filter) {
             LibraryFilter.ALL -> searchFiltered
             LibraryFilter.DOWNLOADED -> searchFiltered.filter {
@@ -108,8 +126,7 @@ class MyLibraryViewModel(
             }
         }
 
-        // 3. Sort
-        val sortedBooks = when (sort) {
+        when (sort) {
             LibrarySort.RECENTLY_READ -> statusFiltered.sortedByDescending {
                 it.readingProgress?.lastReadAt ?: it.downloadedBook.downloadedAt ?: 0L
             }
@@ -118,9 +135,31 @@ class MyLibraryViewModel(
                 it.downloadedBook.downloadedAt ?: 0L
             }
         }
+    }
+
+    val uiState: StateFlow<MyLibraryUiState> = combine(
+        filteredBooks,
+        collections,
+        _selectedTab,
+        _searchQuery,
+        _selectedFilter,
+        _selectedSort,
+        _importState
+    ) { args: Array<Any?> ->
+        @Suppress("UNCHECKED_CAST")
+        val books = args[0] as List<LibraryBook>
+        @Suppress("UNCHECKED_CAST")
+        val collectionList = args[1] as List<CollectionWithBookCount>
+        val tab = args[2] as LibraryTab
+        val query = args[3] as String
+        val filter = args[4] as LibraryFilter
+        val sort = args[5] as LibrarySort
+        val importState = args[6] as ImportState
 
         MyLibraryUiState(
-            books = sortedBooks,
+            selectedTab = tab,
+            books = books,
+            collections = collectionList,
             searchQuery = query,
             selectedFilter = filter,
             selectedSort = sort,
@@ -133,6 +172,10 @@ class MyLibraryViewModel(
         SharingStarted.WhileSubscribed(5_000),
         MyLibraryUiState(isLoading = true)
     )
+
+    fun onTabChange(tab: LibraryTab) {
+        _selectedTab.update { tab }
+    }
 
     fun onSearchQueryChange(query: String) {
         _searchQuery.update { query }
@@ -213,6 +256,66 @@ class MyLibraryViewModel(
         }
     }
 
+    // Collection management
+    fun createCollection(name: String, onComplete: (Result<String>) -> Unit = {}) {
+        viewModelScope.launch {
+            val result = collectionRepository.createCollection(name)
+            if (result.isSuccess) {
+                _events.emit(LibraryEvent.ShowMessage("Đã tạo bộ sưu tập: $name"))
+            } else {
+                _events.emit(LibraryEvent.ShowMessage(result.exceptionOrNull()?.message ?: "Lỗi tạo bộ sưu tập"))
+            }
+            onComplete(result)
+        }
+    }
+
+    fun renameCollection(id: String, newName: String, onComplete: (Result<Unit>) -> Unit = {}) {
+        viewModelScope.launch {
+            val result = collectionRepository.renameCollection(id, newName)
+            if (result.isSuccess) {
+                _events.emit(LibraryEvent.ShowMessage("Đã đổi tên thành: $newName"))
+            } else {
+                _events.emit(LibraryEvent.ShowMessage(result.exceptionOrNull()?.message ?: "Lỗi đổi tên"))
+            }
+            onComplete(result)
+        }
+    }
+
+    fun deleteCollection(id: String) {
+        viewModelScope.launch {
+            collectionRepository.deleteCollection(id)
+            _events.emit(LibraryEvent.ShowMessage("Đã xóa bộ sưu tập"))
+        }
+    }
+
+    fun observeBooksInCollection(collectionId: String): Flow<List<LibraryBook>> {
+        return combine(
+            collectionRepository.observeBookIdsInCollection(collectionId),
+            libraryRepository.observeLibraryBooks()
+        ) { bookIds, libraryBooks ->
+            val idSet = bookIds.toSet()
+            libraryBooks.filter { idSet.contains(it.book.id) }
+        }
+    }
+
+    fun getCollectionsForBook(bookId: String): Flow<List<CollectionEntity>> {
+        return collectionRepository.observeCollectionsForBook(bookId)
+    }
+
+    fun updateBookCollections(bookId: String, selectedCollectionIds: Set<String>) {
+        viewModelScope.launch {
+            collectionRepository.updateBookCollections(bookId, selectedCollectionIds)
+            _events.emit(LibraryEvent.ShowMessage("Đã cập nhật bộ sưu tập cho sách"))
+        }
+    }
+
+    fun removeBookFromCollection(bookId: String, collectionId: String) {
+        viewModelScope.launch {
+            collectionRepository.removeBookFromCollection(bookId, collectionId)
+            _events.emit(LibraryEvent.ShowMessage("Đã xóa sách khỏi bộ sưu tập"))
+        }
+    }
+
     companion object {
         fun provideFactory(context: Context): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
@@ -246,7 +349,10 @@ class MyLibraryViewModel(
                         bookmarkDao = db.bookmarkDao(),
                         favoriteDao = db.favoriteDao()
                     )
-                    return MyLibraryViewModel(libraryRepo, downloadRepo, favRepo, importRepo) as T
+                    val collectionRepo = LocalCollectionRepository(
+                        collectionDao = db.collectionDao()
+                    )
+                    return MyLibraryViewModel(libraryRepo, downloadRepo, favRepo, importRepo, collectionRepo) as T
                 }
             }
     }

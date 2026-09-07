@@ -1,29 +1,44 @@
 package com.nocap.app.presentation.reader
 
 import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.nocap.app.core.database.AppDatabase
+import com.nocap.app.core.database.entity.CustomFontEntity
+import com.nocap.app.core.database.entity.HighlightEntity
+import com.nocap.app.core.database.entity.PerBookPreferencesEntity
 import com.nocap.app.core.datastore.ReaderFontFamily
+import com.nocap.app.core.datastore.ReaderOrientation
 import com.nocap.app.core.datastore.ReaderPreferences
 import com.nocap.app.core.datastore.ReaderPreferencesDataStore
 import com.nocap.app.core.datastore.ReaderTextAlignment
 import com.nocap.app.core.datastore.ReaderTheme
+import com.nocap.app.data.annotation.LocalAnnotationRepository
 import com.nocap.app.data.bookmark.LocalBookmarkRepository
 import com.nocap.app.data.catalog.LocalCatalogRepository
 import com.nocap.app.data.download.LocalBookDownloadRepository
 import com.nocap.app.data.favorite.LocalFavoriteRepository
+import com.nocap.app.data.font.LocalCustomFontRepository
+import com.nocap.app.data.importer.FormatSniffer
 import com.nocap.app.data.library.LocalLibraryRepository
+import com.nocap.app.data.preferences.LocalPerBookPreferencesRepository
 import com.nocap.app.data.reader.ReadiumPublicationManager
 import com.nocap.app.domain.model.Bookmark
 import com.nocap.app.domain.model.DownloadStatus
+import com.nocap.app.domain.model.PublicationFormat
 import com.nocap.app.domain.model.ReadingProgress
 import com.nocap.app.domain.model.TocItem
-import com.nocap.app.domain.repository.BookmarkRepository
+import com.nocap.app.domain.repository.AnnotationRepository
 import com.nocap.app.domain.repository.BookDownloadRepository
+import com.nocap.app.domain.repository.BookmarkRepository
 import com.nocap.app.domain.repository.CatalogRepository
+import com.nocap.app.domain.repository.CustomFontRepository
 import com.nocap.app.domain.repository.LibraryRepository
+import com.nocap.app.domain.repository.PerBookPreferencesRepository
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -31,6 +46,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.readium.r2.navigator.epub.EpubPreferences
 import org.readium.r2.navigator.preferences.FontFamily
@@ -38,11 +54,11 @@ import org.readium.r2.navigator.preferences.TextAlign
 import org.readium.r2.navigator.preferences.Theme
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
+import org.readium.r2.shared.publication.services.search.isSearchable
+import org.readium.r2.shared.publication.services.search.search
+import org.readium.r2.shared.util.Try
 import java.io.File
 import java.util.UUID
-
-import com.nocap.app.data.importer.FormatSniffer
-import com.nocap.app.domain.model.PublicationFormat
 
 sealed interface ReaderUiState {
     data object Loading : ReaderUiState
@@ -58,6 +74,13 @@ sealed interface ReaderUiState {
     data class Error(val message: String) : ReaderUiState
 }
 
+data class SearchResultItem(
+    val locator: Locator,
+    val chapterTitle: String?,
+    val snippet: String,
+    val progression: Float?
+)
+
 fun ReaderPreferences.toReadiumPreferences(): EpubPreferences {
     val readiumTheme = when (theme) {
         ReaderTheme.LIGHT -> Theme.LIGHT
@@ -68,6 +91,9 @@ fun ReaderPreferences.toReadiumPreferences(): EpubPreferences {
     val readiumFontFamily = when (fontFamily) {
         ReaderFontFamily.SERIF -> FontFamily.SERIF
         ReaderFontFamily.SANS_SERIF -> FontFamily.SANS_SERIF
+        ReaderFontFamily.LORA -> FontFamily("Lora")
+        ReaderFontFamily.ROBOTO -> FontFamily("Roboto")
+        ReaderFontFamily.CUSTOM -> customFontName?.let { FontFamily(it) }
         else -> null
     }
 
@@ -93,20 +119,70 @@ class ReaderViewModel(
     private val catalogRepository: CatalogRepository,
     private val bookmarkRepository: BookmarkRepository,
     private val preferencesDataStore: ReaderPreferencesDataStore,
-    private val publicationManager: ReadiumPublicationManager
+    private val publicationManager: ReadiumPublicationManager,
+    private val annotationRepository: AnnotationRepository,
+    private val perBookPreferencesRepository: PerBookPreferencesRepository,
+    private val customFontRepository: CustomFontRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<ReaderUiState>(ReaderUiState.Loading)
     val uiState: StateFlow<ReaderUiState> = _uiState.asStateFlow()
 
-    val preferences: StateFlow<ReaderPreferences> = preferencesDataStore.readerPreferences
+    private val globalPreferences = preferencesDataStore.readerPreferences
+    private val perBookPreferences = perBookPreferencesRepository.observePreferences(bookId)
+
+    val isUsingBookOverride: StateFlow<Boolean> = perBookPreferences.combine(globalPreferences) { perBook, _ ->
+        perBook?.useBookOverride == true
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = false
+    )
+
+    val preferences: StateFlow<ReaderPreferences> = combine(
+        globalPreferences,
+        perBookPreferences
+    ) { global, perBook ->
+        if (perBook != null && perBook.useBookOverride) {
+            val theme = perBook.theme?.let { runCatching { ReaderTheme.valueOf(it) }.getOrNull() } ?: global.theme
+            val fontFamily = perBook.fontFamily?.let { runCatching { ReaderFontFamily.valueOf(it) }.getOrNull() } ?: global.fontFamily
+            val fontSize = perBook.fontSize ?: global.fontSizeMultiplier
+            val lineHeight = perBook.lineHeight ?: global.lineHeightMultiplier
+            val textAlignment = perBook.textAlignment?.let { runCatching { ReaderTextAlignment.valueOf(it) }.getOrNull() } ?: global.textAlignment
+            val isScrollMode = perBook.scrollMode ?: global.isScrollMode
+
+            global.copy(
+                theme = theme,
+                fontFamily = fontFamily,
+                fontSizeMultiplier = fontSize,
+                lineHeightMultiplier = lineHeight,
+                textAlignment = textAlignment,
+                isScrollMode = isScrollMode
+            )
+        } else {
+            global
+        }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = ReaderPreferences()
+    )
+
+    val bookmarks: StateFlow<List<Bookmark>> = bookmarkRepository.observeBookmarks(bookId)
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
-            initialValue = ReaderPreferences()
+            initialValue = emptyList()
         )
 
-    val bookmarks: StateFlow<List<Bookmark>> = bookmarkRepository.observeBookmarks(bookId)
+    val highlights: StateFlow<List<HighlightEntity>> = annotationRepository.observeHighlights(bookId)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    val customFonts: StateFlow<List<CustomFontEntity>> = customFontRepository.observeFonts()
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
@@ -125,6 +201,20 @@ class ReaderViewModel(
         initialValue = false
     )
 
+    // In-book Search
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    private val _isSearching = MutableStateFlow(false)
+    val isSearching: StateFlow<Boolean> = _isSearching.asStateFlow()
+
+    private val _searchResults = MutableStateFlow<List<SearchResultItem>>(emptyList())
+    val searchResults: StateFlow<List<SearchResultItem>> = _searchResults.asStateFlow()
+
+    private val _isSearchSupported = MutableStateFlow(false)
+    val isSearchSupported: StateFlow<Boolean> = _isSearchSupported.asStateFlow()
+
+    private var searchJob: Job? = null
     private var currentPublication: Publication? = null
     private var lastSavedTime = 0L
 
@@ -160,6 +250,7 @@ class ReaderViewModel(
                 currentPublication = publication
                 val toc = publicationManager.extractTableOfContents(publication)
                 val format = catalogBook?.format ?: FormatSniffer.sniff(file) ?: PublicationFormat.EPUB
+                _isSearchSupported.value = publication.isSearchable
                 _uiState.value = ReaderUiState.Ready(
                     publication = publication,
                     initialLocator = initialLocator,
@@ -240,32 +331,266 @@ class ReaderViewModel(
         }
     }
 
-    fun updateTheme(theme: ReaderTheme) {
-        viewModelScope.launch { preferencesDataStore.updateTheme(theme) }
+    // Search inside EPUB
+    fun onSearchQueryChanged(query: String) {
+        _searchQuery.value = query
+        searchJob?.cancel()
+
+        if (query.trim().isBlank()) {
+            _searchResults.value = emptyList()
+            _isSearching.value = false
+            return
+        }
+
+        val pub = currentPublication
+        if (pub == null || !pub.isSearchable) {
+            _searchResults.value = emptyList()
+            _isSearching.value = false
+            return
+        }
+
+        searchJob = viewModelScope.launch {
+            delay(350) // Debounce input
+            _isSearching.value = true
+            _searchResults.value = emptyList()
+
+            try {
+                val iterator = pub.search(query.trim())
+                if (iterator == null) {
+                    _isSearching.value = false
+                    return@launch
+                }
+
+                val collected = mutableListOf<SearchResultItem>()
+                while (collected.size < 60) {
+                    val res = iterator.next()
+                    if (res is Try.Success) {
+                        val collection = res.value
+                        if (collection == null || collection.locators.isEmpty()) break
+                        for (loc in collection.locators) {
+                            val snippet = loc.text.highlight
+                                ?: listOfNotNull(loc.text.before, loc.text.after).joinToString(" ").ifBlank { loc.title.orEmpty() }
+                            collected.add(
+                                SearchResultItem(
+                                    locator = loc,
+                                    chapterTitle = loc.title,
+                                    snippet = snippet.trim(),
+                                    progression = loc.locations.progression?.toFloat()
+                                )
+                            )
+                        }
+                        _searchResults.value = collected.toList()
+                    } else {
+                        break
+                    }
+                }
+                iterator.close()
+            } catch (e: Exception) {
+                // Cancelled or search failed
+            } finally {
+                _isSearching.value = false
+            }
+        }
     }
 
-    fun updateFontFamily(fontFamily: ReaderFontFamily) {
-        viewModelScope.launch { preferencesDataStore.updateFontFamily(fontFamily) }
+    fun clearSearch() {
+        searchJob?.cancel()
+        _searchQuery.value = ""
+        _searchResults.value = emptyList()
+        _isSearching.value = false
+    }
+
+    // Highlights & Notes
+    fun addHighlight(
+        locator: Locator,
+        colorHex: String = "YELLOW",
+        note: String? = null,
+        onComplete: (HighlightEntity) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            val text = locator.text.highlight ?: locator.text.before ?: locator.title ?: ""
+            val locatorJson = publicationManager.serializeLocator(locator)
+            val result = annotationRepository.addHighlight(
+                bookId = bookId,
+                locatorJson = locatorJson,
+                text = text.trim(),
+                color = colorHex,
+                note = note?.trim()?.ifBlank { null }
+            )
+            result.onSuccess { onComplete(it) }
+        }
+    }
+
+    fun updateHighlightColor(id: String, colorHex: String) {
+        viewModelScope.launch {
+            annotationRepository.updateHighlightColor(id, colorHex)
+        }
+    }
+
+    fun updateHighlightNote(id: String, note: String?) {
+        viewModelScope.launch {
+            annotationRepository.updateNote(id, note?.trim()?.ifBlank { null })
+        }
+    }
+
+    fun deleteHighlight(id: String) {
+        viewModelScope.launch {
+            annotationRepository.deleteHighlight(id)
+        }
+    }
+
+    // Per-Book Reader Settings
+    fun toggleUseBookOverride(enabled: Boolean) {
+        viewModelScope.launch {
+            val currentPref = preferences.value
+            if (enabled) {
+                val override = PerBookPreferencesEntity(
+                    bookId = bookId,
+                    theme = currentPref.theme.name,
+                    fontFamily = currentPref.fontFamily.name,
+                    fontSize = currentPref.fontSizeMultiplier,
+                    lineHeight = currentPref.lineHeightMultiplier,
+                    textAlignment = currentPref.textAlignment.name,
+                    scrollMode = currentPref.isScrollMode,
+                    useBookOverride = true
+                )
+                perBookPreferencesRepository.savePreferences(override)
+            } else {
+                val existing = perBookPreferences.first()
+                if (existing != null) {
+                    perBookPreferencesRepository.savePreferences(existing.copy(useBookOverride = false))
+                }
+            }
+        }
+    }
+
+    fun resetBookOverride() {
+        viewModelScope.launch {
+            perBookPreferencesRepository.resetToDefaults(bookId)
+        }
+    }
+
+    fun updateTheme(theme: ReaderTheme) {
+        viewModelScope.launch {
+            if (isUsingBookOverride.value) {
+                val existing = perBookPreferences.first() ?: PerBookPreferencesEntity(bookId = bookId)
+                perBookPreferencesRepository.savePreferences(existing.copy(theme = theme.name, useBookOverride = true))
+            } else {
+                preferencesDataStore.updateTheme(theme)
+            }
+        }
+    }
+
+    fun updateFontFamily(fontFamily: ReaderFontFamily, customFontName: String? = null) {
+        viewModelScope.launch {
+            if (isUsingBookOverride.value) {
+                val existing = perBookPreferences.first() ?: PerBookPreferencesEntity(bookId = bookId)
+                perBookPreferencesRepository.savePreferences(
+                    existing.copy(
+                        fontFamily = fontFamily.name,
+                        useBookOverride = true
+                    )
+                )
+            } else {
+                preferencesDataStore.updateFontFamily(fontFamily, customFontName)
+            }
+        }
     }
 
     fun updateFontSize(multiplier: Float) {
-        viewModelScope.launch { preferencesDataStore.updateFontSize(multiplier) }
+        viewModelScope.launch {
+            if (isUsingBookOverride.value) {
+                val existing = perBookPreferences.first() ?: PerBookPreferencesEntity(bookId = bookId)
+                perBookPreferencesRepository.savePreferences(
+                    existing.copy(fontSize = multiplier.coerceIn(0.8f, 2.0f), useBookOverride = true)
+                )
+            } else {
+                preferencesDataStore.updateFontSize(multiplier)
+            }
+        }
     }
 
     fun updateLineHeight(multiplier: Float) {
-        viewModelScope.launch { preferencesDataStore.updateLineHeight(multiplier) }
+        viewModelScope.launch {
+            if (isUsingBookOverride.value) {
+                val existing = perBookPreferences.first() ?: PerBookPreferencesEntity(bookId = bookId)
+                perBookPreferencesRepository.savePreferences(
+                    existing.copy(lineHeight = multiplier.coerceIn(1.2f, 2.0f), useBookOverride = true)
+                )
+            } else {
+                preferencesDataStore.updateLineHeight(multiplier)
+            }
+        }
     }
 
     fun updateTextAlignment(alignment: ReaderTextAlignment) {
-        viewModelScope.launch { preferencesDataStore.updateTextAlignment(alignment) }
+        viewModelScope.launch {
+            if (isUsingBookOverride.value) {
+                val existing = perBookPreferences.first() ?: PerBookPreferencesEntity(bookId = bookId)
+                perBookPreferencesRepository.savePreferences(
+                    existing.copy(textAlignment = alignment.name, useBookOverride = true)
+                )
+            } else {
+                preferencesDataStore.updateTextAlignment(alignment)
+            }
+        }
     }
 
     fun updateScrollMode(isScrollMode: Boolean) {
-        viewModelScope.launch { preferencesDataStore.updateScrollMode(isScrollMode) }
+        viewModelScope.launch {
+            if (isUsingBookOverride.value) {
+                val existing = perBookPreferences.first() ?: PerBookPreferencesEntity(bookId = bookId)
+                perBookPreferencesRepository.savePreferences(
+                    existing.copy(scrollMode = isScrollMode, useBookOverride = true)
+                )
+            } else {
+                preferencesDataStore.updateScrollMode(isScrollMode)
+            }
+        }
+    }
+
+    // Global Reader Controls
+    fun updateVolumeButtonsTurnPages(enabled: Boolean) {
+        viewModelScope.launch { preferencesDataStore.updateVolumeButtonsTurnPages(enabled) }
+    }
+
+    fun updateKeepScreenOn(enabled: Boolean) {
+        viewModelScope.launch { preferencesDataStore.updateKeepScreenOn(enabled) }
+    }
+
+    fun updateFullscreen(enabled: Boolean) {
+        viewModelScope.launch { preferencesDataStore.updateFullscreen(enabled) }
+    }
+
+    fun updateOrientation(orientation: ReaderOrientation) {
+        viewModelScope.launch { preferencesDataStore.updateOrientation(orientation) }
+    }
+
+    fun updateBrightness(followSystem: Boolean, customBrightness: Float = 0.5f) {
+        viewModelScope.launch { preferencesDataStore.updateBrightness(followSystem, customBrightness) }
+    }
+
+    fun updateChromeOptions(showProgress: Boolean, showPercentage: Boolean, showClock: Boolean) {
+        viewModelScope.launch { preferencesDataStore.updateChromeOptions(showProgress, showPercentage, showClock) }
+    }
+
+    // Custom Fonts
+    fun importCustomFont(uri: Uri, onResult: (Result<CustomFontEntity>) -> Unit = {}) {
+        viewModelScope.launch {
+            val result = customFontRepository.importFont(uri)
+            onResult(result)
+        }
+    }
+
+    fun deleteCustomFont(fontId: String) {
+        viewModelScope.launch {
+            customFontRepository.deleteFont(fontId)
+        }
     }
 
     override fun onCleared() {
         super.onCleared()
+        searchJob?.cancel()
         currentPublication?.let { publicationManager.closePublication(it) }
         currentPublication = null
     }
@@ -280,11 +605,13 @@ class ReaderViewModel(
                 val db = AppDatabase.getInstance(context)
                 val catalogRepo = LocalCatalogRepository(db.progressDao(), db.catalogDao())
                 val downloadRepo = LocalBookDownloadRepository(context, db.downloadDao(), db.catalogDao(), catalogRepo)
-                val favRepo = LocalFavoriteRepository(db.favoriteDao(), db.catalogDao(), catalogRepo)
                 val libraryRepo = LocalLibraryRepository(db.downloadDao(), db.progressDao(), db.favoriteDao(), db.catalogDao(), catalogRepo)
                 val bookmarkRepo = LocalBookmarkRepository(db.bookmarkDao(), db.catalogDao(), catalogRepo)
                 val prefStore = ReaderPreferencesDataStore(context.applicationContext)
                 val publicationManager = ReadiumPublicationManager(context.applicationContext)
+                val annotationRepo = LocalAnnotationRepository(db.highlightDao())
+                val perBookRepo = LocalPerBookPreferencesRepository(db.perBookPreferencesDao())
+                val customFontRepo = LocalCustomFontRepository(context.applicationContext, db.customFontDao())
 
                 return ReaderViewModel(
                     bookId = bookId,
@@ -293,7 +620,10 @@ class ReaderViewModel(
                     catalogRepository = catalogRepo,
                     bookmarkRepository = bookmarkRepo,
                     preferencesDataStore = prefStore,
-                    publicationManager = publicationManager
+                    publicationManager = publicationManager,
+                    annotationRepository = annotationRepo,
+                    perBookPreferencesRepository = perBookRepo,
+                    customFontRepository = customFontRepo
                 ) as T
             }
         }

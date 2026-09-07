@@ -15,11 +15,20 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nocap.app.core.designsystem.EbookAppTheme
 import com.nocap.app.core.navigation.AppNavHost
 import com.nocap.app.domain.model.PublicationSource
+import android.view.KeyEvent
 import kotlinx.coroutines.flow.MutableStateFlow
 
 class MainActivity : FragmentActivity() {
 
     private val pendingSharedSource = MutableStateFlow<PublicationSource?>(null)
+    var volumeKeyListener: ((Int) -> Boolean)? = null
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (volumeKeyListener?.invoke(keyCode) == true) {
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
