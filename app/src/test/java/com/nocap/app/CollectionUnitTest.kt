@@ -184,5 +184,16 @@ class CollectionUnitTest {
 
         override suspend fun getBookIdsInCollection(collectionId: String): List<String> =
             crossRefs.filter { it.collectionId == collectionId }.map { it.bookId }
+
+        override suspend fun addBooksToCollection(crossRefs: List<BookCollectionCrossRef>) {
+            crossRefs.forEach { ref ->
+                if (this.crossRefs.none { it.bookId == ref.bookId && it.collectionId == ref.collectionId }) {
+                    this.crossRefs.add(ref)
+                }
+            }
+        }
+
+        override fun observeAllCollectionCrossRefs(): Flow<List<BookCollectionCrossRef>> =
+            flowOf(crossRefs.toList())
     }
 }

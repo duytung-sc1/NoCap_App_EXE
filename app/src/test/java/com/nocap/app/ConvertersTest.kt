@@ -69,4 +69,19 @@ class ConvertersTest {
         val deserialized = converters.toPublicationSourceType("UNKNOWN_SOURCE")
         assertEquals(com.nocap.app.domain.model.PublicationSourceType.LOCAL_FILE, deserialized)
     }
+
+    @Test
+    fun `test DocumentReadingStatus converter serialization and deserialization`() {
+        com.nocap.app.domain.model.DocumentReadingStatus.entries.forEach { status ->
+            val serialized = converters.fromDocumentReadingStatus(status)
+            val deserialized = converters.toDocumentReadingStatus(serialized)
+            assertEquals(status, deserialized)
+        }
+    }
+
+    @Test
+    fun `test DocumentReadingStatus converter unknown string defaults to UNREAD`() {
+        val deserialized = converters.toDocumentReadingStatus("UNKNOWN_STATUS")
+        assertEquals(com.nocap.app.domain.model.DocumentReadingStatus.UNREAD, deserialized)
+    }
 }

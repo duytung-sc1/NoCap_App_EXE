@@ -251,6 +251,7 @@ class ReaderViewModel(
                 val toc = publicationManager.extractTableOfContents(publication)
                 val format = catalogBook?.format ?: FormatSniffer.sniff(file) ?: PublicationFormat.EPUB
                 _isSearchSupported.value = publication.isSearchable
+                libraryRepository.updateLastOpenedAt(bookId, System.currentTimeMillis())
                 _uiState.value = ReaderUiState.Ready(
                     publication = publication,
                     initialLocator = initialLocator,
@@ -283,6 +284,15 @@ class ReaderViewModel(
                 lastReadAt = now
             )
             libraryRepository.saveReadingProgress(progress)
+
+            val currentBook = catalogRepository.getBookById(bookId)
+            if (currentBook != null) {
+                if (currentBook.readingStatus == com.nocap.app.domain.model.DocumentReadingStatus.UNREAD && progression > 0f) {
+                    libraryRepository.setReadingStatus(bookId, com.nocap.app.domain.model.DocumentReadingStatus.READING)
+                } else if (currentBook.readingStatus == com.nocap.app.domain.model.DocumentReadingStatus.READING && progression >= 0.98f) {
+                    libraryRepository.setReadingStatus(bookId, com.nocap.app.domain.model.DocumentReadingStatus.COMPLETED)
+                }
+            }
         }
     }
 

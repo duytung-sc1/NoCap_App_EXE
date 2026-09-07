@@ -1,4 +1,4 @@
-package com.nocap.app.core.database.dao
+﻿package com.nocap.app.core.database.dao
 
 import androidx.room.Dao
 import androidx.room.Insert
@@ -6,6 +6,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import com.nocap.app.core.database.entity.CatalogBookEntity
 import com.nocap.app.core.database.entity.CategoryEntity
+import com.nocap.app.domain.model.DocumentReadingStatus
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -51,4 +52,34 @@ interface CatalogDao {
 
     @Query("SELECT * FROM categories WHERE id = :categoryId")
     suspend fun getCategoryById(categoryId: String): CategoryEntity?
+
+    @Query("UPDATE catalog_books SET is_in_inbox = :isInInbox, inbox_added_at = CASE WHEN :isInInbox = 1 THEN :inboxAddedAt ELSE inbox_added_at END WHERE id = :bookId")
+    suspend fun updateInboxState(bookId: String, isInInbox: Boolean, inboxAddedAt: Long? = System.currentTimeMillis())
+
+    @Query("UPDATE catalog_books SET is_pinned = :isPinned WHERE id = :bookId")
+    suspend fun updatePinnedState(bookId: String, isPinned: Boolean)
+
+    @Query("UPDATE catalog_books SET is_archived = :isArchived, is_in_inbox = CASE WHEN :isArchived = 1 THEN 0 ELSE is_in_inbox END WHERE id = :bookId")
+    suspend fun updateArchivedState(bookId: String, isArchived: Boolean)
+
+    @Query("UPDATE catalog_books SET reading_status = :status WHERE id = :bookId")
+    suspend fun updateReadingStatus(bookId: String, status: DocumentReadingStatus)
+
+    @Query("UPDATE catalog_books SET user_title_override = :titleOverride, user_author_override = :authorOverride WHERE id = :bookId")
+    suspend fun updateMetadataOverrides(bookId: String, titleOverride: String?, authorOverride: String?)
+
+    @Query("UPDATE catalog_books SET custom_cover_path = :coverPath WHERE id = :bookId")
+    suspend fun updateCustomCover(bookId: String, coverPath: String?)
+
+    @Query("UPDATE catalog_books SET last_opened_at = :timestamp WHERE id = :bookId")
+    suspend fun updateLastOpenedAt(bookId: String, timestamp: Long)
+
+    @Query("UPDATE catalog_books SET is_archived = :isArchived, is_in_inbox = CASE WHEN :isArchived = 1 THEN 0 ELSE is_in_inbox END WHERE id IN (:bookIds)")
+    suspend fun updateBulkArchive(bookIds: List<String>, isArchived: Boolean)
+
+    @Query("UPDATE catalog_books SET is_pinned = :isPinned WHERE id IN (:bookIds)")
+    suspend fun updateBulkPin(bookIds: List<String>, isPinned: Boolean)
+
+    @Query("UPDATE catalog_books SET reading_status = :status WHERE id IN (:bookIds)")
+    suspend fun updateBulkReadingStatus(bookIds: List<String>, status: DocumentReadingStatus)
 }

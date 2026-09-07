@@ -1,13 +1,15 @@
-package com.nocap.app.core.database
+﻿package com.nocap.app.core.database
 
 import com.nocap.app.core.database.entity.CatalogBookEntity
 import com.nocap.app.core.database.entity.CategoryEntity
 import com.nocap.app.core.database.entity.DownloadedBookEntity
 import com.nocap.app.core.database.entity.ReadingProgressEntity
+import com.nocap.app.core.database.entity.TagEntity
 import com.nocap.app.domain.model.CatalogBook
 import com.nocap.app.domain.model.Category
 import com.nocap.app.domain.model.DownloadedBook
 import com.nocap.app.domain.model.ReadingProgress
+import com.nocap.app.domain.model.Tag
 
 fun CatalogBook.toEntity(): CatalogBookEntity = CatalogBookEntity(
     id = id,
@@ -31,7 +33,18 @@ fun CatalogBook.toEntity(): CatalogBookEntity = CatalogBookEntity(
     format = format,
     mediaType = mediaType,
     sourceType = sourceType,
-    sourceUrl = sourceUrl
+    sourceUrl = sourceUrl,
+    isInInbox = isInInbox,
+    inboxAddedAt = inboxAddedAt,
+    isPinned = isPinned,
+    isArchived = isArchived,
+    readingStatus = readingStatus,
+    userTitleOverride = userTitleOverride,
+    userAuthorOverride = userAuthorOverride,
+    customCoverPath = customCoverPath,
+    lastOpenedAt = lastOpenedAt,
+    addedAt = addedAt,
+    originalFilename = originalFilename
 )
 
 fun CatalogBookEntity.toDomain(): CatalogBook = CatalogBook(
@@ -56,7 +69,18 @@ fun CatalogBookEntity.toDomain(): CatalogBook = CatalogBook(
     format = format,
     mediaType = mediaType,
     sourceType = sourceType,
-    sourceUrl = sourceUrl
+    sourceUrl = sourceUrl,
+    isInInbox = isInInbox,
+    inboxAddedAt = inboxAddedAt,
+    isPinned = isPinned,
+    isArchived = isArchived,
+    readingStatus = readingStatus,
+    userTitleOverride = userTitleOverride,
+    userAuthorOverride = userAuthorOverride,
+    customCoverPath = customCoverPath,
+    lastOpenedAt = lastOpenedAt,
+    addedAt = addedAt,
+    originalFilename = originalFilename
 )
 
 fun Category.toEntity(): CategoryEntity = CategoryEntity(
@@ -137,4 +161,18 @@ fun com.nocap.app.domain.model.Bookmark.toEntity(): com.nocap.app.core.database.
     createdAt = createdAt,
     syncVersion = syncVersion,
     isDeleted = isDeleted
+)
+
+fun TagEntity.toDomain(): Tag = Tag(
+    id = id,
+    name = name,
+    normalizedName = normalizedName,
+    createdAt = createdAt
+)
+
+fun Tag.toEntity(): TagEntity = TagEntity(
+    id = id,
+    name = name,
+    normalizedName = normalizedName,
+    createdAt = createdAt
 )

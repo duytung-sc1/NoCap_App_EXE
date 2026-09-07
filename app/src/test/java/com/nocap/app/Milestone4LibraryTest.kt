@@ -5,8 +5,6 @@ import com.nocap.app.domain.model.DownloadStatus
 import com.nocap.app.domain.model.DownloadedBook
 import com.nocap.app.domain.model.LibraryBook
 import com.nocap.app.domain.model.ReadingProgress
-import com.nocap.app.presentation.library.LibraryFilter
-import com.nocap.app.presentation.library.LibrarySort
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull

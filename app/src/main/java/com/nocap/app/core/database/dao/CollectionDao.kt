@@ -1,4 +1,4 @@
-package com.nocap.app.core.database.dao
+﻿package com.nocap.app.core.database.dao
 
 import androidx.room.Dao
 import androidx.room.Insert
@@ -53,6 +53,9 @@ interface CollectionDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun addBookToCollection(crossRef: BookCollectionCrossRef)
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun addBooksToCollection(crossRefs: List<BookCollectionCrossRef>)
+
     @Query("DELETE FROM book_collection_cross_ref WHERE book_id = :bookId AND collection_id = :collectionId")
     suspend fun removeBookFromCollection(bookId: String, collectionId: String)
 
@@ -68,6 +71,7 @@ interface CollectionDao {
         SELECT c.* FROM collections c
         INNER JOIN book_collection_cross_ref b ON c.id = b.collection_id
         WHERE b.book_id = :bookId
+        ORDER BY c.name ASC
     """)
     suspend fun getCollectionsForBook(bookId: String): List<CollectionEntity>
 
@@ -76,4 +80,7 @@ interface CollectionDao {
 
     @Query("SELECT book_id FROM book_collection_cross_ref WHERE collection_id = :collectionId")
     suspend fun getBookIdsInCollection(collectionId: String): List<String>
+
+    @Query("SELECT * FROM book_collection_cross_ref")
+    fun observeAllCollectionCrossRefs(): Flow<List<BookCollectionCrossRef>>
 }

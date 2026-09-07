@@ -55,23 +55,31 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
-        if (intent == null || intent.action != Intent.ACTION_SEND) return
+        if (intent == null) return
+        val action = intent.action
+        if (action != Intent.ACTION_SEND && action != Intent.ACTION_VIEW) return
 
-        if (intent.hasExtra(Intent.EXTRA_STREAM)) {
-            val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        val uri: Uri? = if (intent.hasExtra(Intent.EXTRA_STREAM)) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
             } else {
                 @Suppress("DEPRECATION")
                 intent.getParcelableExtra(Intent.EXTRA_STREAM)
-            }
-            if (uri != null) {
-                pendingSharedSource.value = PublicationSource.SharedUri(
-                    uri = uri,
-                    mimeType = intent.type
-                )
-                intent.removeExtra(Intent.EXTRA_STREAM)
-            }
-        } else if (intent.hasExtra(Intent.EXTRA_TEXT)) {
+            } ?: intent.getStringExtra(Intent.EXTRA_STREAM)?.let { Uri.parse(it) }
+        } else {
+            intent.data
+        }
+
+        if (uri != null) {
+            pendingSharedSource.value = PublicationSource.SharedUri(
+                uri = uri,
+                mimeType = intent.type
+            )
+            intent.removeExtra(Intent.EXTRA_STREAM)
+            return
+        }
+
+        if (intent.hasExtra(Intent.EXTRA_TEXT)) {
             val text = intent.getStringExtra(Intent.EXTRA_TEXT)
             if (!text.isNullOrBlank()) {
                 val url = extractHttpsUrl(text)

@@ -200,7 +200,18 @@ class LocalImportBookRepository(
                 format = format,
                 mediaType = FormatSniffer.mimeTypeFor(format),
                 sourceType = source.sourceType,
-                sourceUrl = sourceUrl
+                sourceUrl = sourceUrl,
+                isInInbox = true,
+                inboxAddedAt = System.currentTimeMillis(),
+                isPinned = false,
+                isArchived = false,
+                readingStatus = com.nocap.app.domain.model.DocumentReadingStatus.UNREAD,
+                userTitleOverride = null,
+                userAuthorOverride = null,
+                customCoverPath = null,
+                lastOpenedAt = null,
+                addedAt = System.currentTimeMillis(),
+                originalFilename = suggestedFilename
             )
 
             val downloadEntity = DownloadedBookEntity(
@@ -255,12 +266,21 @@ class LocalImportBookRepository(
         onProgress: ((DownloadProgress) -> Unit)?
     ): File {
         val tempFile = File(context.cacheDir, "import_temp_${UUID.randomUUID()}.tmp")
-        val inputStream = context.contentResolver.openInputStream(uri)
-            ?: throw ImportException.StorageError("Không thể mở tệp từ nguồn được chọn")
+        val inputStream = if (uri.scheme == "file") {
+            val path = uri.path ?: throw ImportException.StorageError("Đường dẫn tệp không hợp lệ")
+            FileInputStream(File(path))
+        } else {
+            context.contentResolver.openInputStream(uri)
+                ?: throw ImportException.StorageError("Không thể mở tệp từ nguồn được chọn")
+        }
 
-        val totalBytes = runCatching {
-            context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L
-        }.getOrDefault(-1L)
+        val totalBytes = if (uri.scheme == "file") {
+            uri.path?.let { File(it).length() } ?: -1L
+        } else {
+            runCatching {
+                context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L
+            }.getOrDefault(-1L)
+        }
 
         var copiedBytes = 0L
         val buffer = ByteArray(8192)
