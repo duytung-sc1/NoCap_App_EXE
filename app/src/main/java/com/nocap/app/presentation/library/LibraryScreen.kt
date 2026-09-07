@@ -1431,7 +1431,21 @@ fun LibraryScreen(
                         .clickable {
                             showImportSourceSheet = false
                             filePickerLauncher.launch(
-                                arrayOf("application/epub+zip", "application/pdf", "application/octet-stream", "*/*")
+                                arrayOf(
+                                    "application/epub+zip",
+                                    "application/pdf",
+                                    "text/plain",
+                                    "text/markdown",
+                                    "text/html",
+                                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                    "image/jpeg",
+                                    "image/png",
+                                    "image/webp",
+                                    "application/x-cbz",
+                                    "application/zip",
+                                    "application/octet-stream",
+                                    "*/*"
+                                )
                             )
                         },
                     shape = RoundedCornerShape(12.dp),
@@ -1791,6 +1805,13 @@ private fun DocumentCardItem(
                             PublicationFormat.PDF -> MaterialTheme.colorScheme.errorContainer
                             PublicationFormat.EPUB -> MaterialTheme.colorScheme.primaryContainer
                             PublicationFormat.CBZ -> MaterialTheme.colorScheme.tertiaryContainer
+                            PublicationFormat.TXT,
+                            PublicationFormat.MARKDOWN,
+                            PublicationFormat.HTML,
+                            PublicationFormat.DOCX -> MaterialTheme.colorScheme.secondaryContainer
+                            PublicationFormat.JPEG,
+                            PublicationFormat.PNG,
+                            PublicationFormat.WEBP -> MaterialTheme.colorScheme.surfaceVariant
                         }
                     ) {
                         Text(
@@ -1801,6 +1822,13 @@ private fun DocumentCardItem(
                                 PublicationFormat.PDF -> MaterialTheme.colorScheme.onErrorContainer
                                 PublicationFormat.EPUB -> MaterialTheme.colorScheme.onPrimaryContainer
                                 PublicationFormat.CBZ -> MaterialTheme.colorScheme.onTertiaryContainer
+                                PublicationFormat.TXT,
+                                PublicationFormat.MARKDOWN,
+                                PublicationFormat.HTML,
+                                PublicationFormat.DOCX -> MaterialTheme.colorScheme.onSecondaryContainer
+                                PublicationFormat.JPEG,
+                                PublicationFormat.PNG,
+                                PublicationFormat.WEBP -> MaterialTheme.colorScheme.onSurfaceVariant
                             },
                             modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
                         )

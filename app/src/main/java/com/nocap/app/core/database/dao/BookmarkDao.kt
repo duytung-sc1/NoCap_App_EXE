@@ -12,6 +12,9 @@ interface BookmarkDao {
     @Query("SELECT * FROM bookmarks WHERE book_id = :bookId AND is_deleted = 0 ORDER BY created_at DESC")
     fun observeBookmarksForBook(bookId: String): Flow<List<BookmarkEntity>>
 
+    @Query("SELECT * FROM bookmarks WHERE book_id = :bookId AND is_deleted = 0 ORDER BY created_at DESC")
+    suspend fun getBookmarksForBook(bookId: String): List<BookmarkEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertBookmark(bookmark: BookmarkEntity)
 

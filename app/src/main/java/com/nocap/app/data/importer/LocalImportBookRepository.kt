@@ -18,6 +18,12 @@ import com.nocap.app.domain.model.PublicationFormat
 import com.nocap.app.domain.model.PublicationSource
 import com.nocap.app.domain.repository.ImportBookRepository
 import com.nocap.app.domain.repository.ImportException
+import com.nocap.app.data.parser.CbzParser
+import com.nocap.app.data.parser.DocxParser
+import com.nocap.app.data.parser.HtmlSanitizerParser
+import com.nocap.app.data.parser.ImageValidator
+import com.nocap.app.data.parser.MarkdownParser
+import com.nocap.app.data.parser.TxtParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -104,42 +110,97 @@ class LocalImportBookRepository(
             if (format == null) {
                 tempFile.delete()
                 return@withContext Result.failure(
-                    ImportException.UnsupportedFormat("Định dạng tệp không được hỗ trợ. Chỉ hỗ trợ sách EPUB và tài liệu PDF.")
+                    ImportException.UnsupportedFormat("Định dạng tệp không được hỗ trợ.")
                 )
             }
 
-            if (format == PublicationFormat.CBZ) {
-                tempFile.delete()
-                return@withContext Result.failure(
-                    ImportException.UnsupportedFormat("Định dạng Comic Book Archive (CBZ) chưa được hỗ trợ trong phiên bản này.")
-                )
-            }
-
-            // 4. Validate with Readium
-            val publicationResult = publicationManager.openPublication(tempFile)
-            if (publicationResult.isFailure) {
-                tempFile.delete()
-                return@withContext Result.failure(
-                    if (format == PublicationFormat.PDF) {
-                        ImportException.CorruptPdf("Tệp PDF bị lỗi hoặc không thể phân tích cú pháp")
-                    } else {
-                        ImportException.InvalidEpub("Tệp không phải là định dạng EPUB hợp lệ hoặc đã bị lỗi")
-                    }
-                )
-            }
-
-            val publication = publicationResult.getOrThrow()
-            val rawTitle = publication.metadata.title
-            val fallbackTitle = (suggestedFilename ?: "imported_${System.currentTimeMillis()}")
+            var title = (suggestedFilename ?: "imported_${System.currentTimeMillis()}")
                 .substringBeforeLast(".")
                 .ifBlank { "Tài liệu chưa đặt tên" }
+            var author = "Tác giả chưa xác định"
+            var description = ""
 
-            val title = if (!rawTitle.isNullOrBlank()) rawTitle else fallbackTitle
-            val author = publication.metadata.authors.firstOrNull()?.name?.ifBlank { null }
-                ?: "Tác giả chưa xác định"
-            val description = publication.metadata.description ?: ""
-
-            publicationManager.closePublication(publication)
+            // 4. Validate & extract metadata by format
+            when (format) {
+                PublicationFormat.EPUB, PublicationFormat.PDF -> {
+                    val publicationResult = publicationManager.openPublication(tempFile)
+                    if (publicationResult.isFailure) {
+                        tempFile.delete()
+                        return@withContext Result.failure(
+                            if (format == PublicationFormat.PDF) {
+                                ImportException.CorruptPdf("Tệp PDF bị lỗi hoặc không thể phân tích cú pháp")
+                            } else {
+                                ImportException.InvalidEpub("Tệp không phải là định dạng EPUB hợp lệ hoặc đã bị lỗi")
+                            }
+                        )
+                    }
+                    val publication = publicationResult.getOrThrow()
+                    val rawTitle = publication.metadata.title
+                    if (!rawTitle.isNullOrBlank()) title = rawTitle
+                    val rawAuthor = publication.metadata.authors.firstOrNull()?.name?.ifBlank { null }
+                    if (rawAuthor != null) author = rawAuthor
+                    description = publication.metadata.description ?: ""
+                    publicationManager.closePublication(publication)
+                }
+                PublicationFormat.TXT -> {
+                    try {
+                        val parsed = TxtParser.validateAndParse(tempFile, suggestedFilename)
+                        title = parsed.title
+                    } catch (e: Exception) {
+                        tempFile.delete()
+                        return@withContext Result.failure(ImportException.InvalidEpub("Tệp TXT không hợp lệ hoặc bị lỗi: ${e.message}"))
+                    }
+                }
+                PublicationFormat.MARKDOWN -> {
+                    try {
+                        val parsed = MarkdownParser.validateAndParse(tempFile, suggestedFilename)
+                        title = parsed.title
+                    } catch (e: Exception) {
+                        tempFile.delete()
+                        return@withContext Result.failure(ImportException.InvalidEpub("Tệp Markdown không hợp lệ hoặc bị lỗi: ${e.message}"))
+                    }
+                }
+                PublicationFormat.HTML -> {
+                    try {
+                        val parsed = HtmlSanitizerParser.validateAndParse(tempFile, suggestedFilename)
+                        title = parsed.title
+                    } catch (e: Exception) {
+                        tempFile.delete()
+                        return@withContext Result.failure(ImportException.InvalidEpub("Tệp HTML không hợp lệ hoặc bị lỗi: ${e.message}"))
+                    }
+                }
+                PublicationFormat.DOCX -> {
+                    try {
+                        val docxMediaDir = File(context.cacheDir, "docx_media").apply { if (!exists()) mkdirs() }
+                        val parsed = DocxParser.parse(tempFile, docxMediaDir, suggestedFilename)
+                        title = parsed.title
+                        if (!parsed.author.isNullOrBlank()) author = parsed.author
+                    } catch (e: Exception) {
+                        tempFile.delete()
+                        return@withContext Result.failure(ImportException.InvalidEpub("Tệp DOCX không hợp lệ hoặc bị lỗi: ${e.message}"))
+                    }
+                }
+                PublicationFormat.JPEG, PublicationFormat.PNG, PublicationFormat.WEBP -> {
+                    try {
+                        ImageValidator.validateImageBounds(tempFile)
+                    } catch (e: Exception) {
+                        tempFile.delete()
+                        return@withContext Result.failure(ImportException.InvalidEpub("Tệp ảnh không hợp lệ hoặc bị lỗi: ${e.message}"))
+                    }
+                }
+                PublicationFormat.CBZ -> {
+                    try {
+                        val pages = CbzParser.validateAndListPages(tempFile)
+                        if (pages.isEmpty()) {
+                            tempFile.delete()
+                            return@withContext Result.failure(ImportException.InvalidEpub("Tệp CBZ không chứa trang ảnh hợp lệ."))
+                        }
+                    } catch (e: Exception) {
+                        tempFile.delete()
+                        return@withContext Result.failure(ImportException.InvalidEpub("Tệp CBZ không hợp lệ hoặc bị lỗi: ${e.message}"))
+                    }
+                }
+            }
 
             // 5. Atomic move to permanent directory
             val importedDir = File(context.filesDir, "imported").apply { if (!exists()) mkdirs() }
@@ -157,6 +218,18 @@ class LocalImportBookRepository(
                     }
                 }
                 tempFile.delete()
+            }
+
+            // Cover handling for Image and CBZ
+            var customCoverPath: String? = null
+            if (format.isSingleImage) {
+                customCoverPath = finalFile.absolutePath
+            } else if (format == PublicationFormat.CBZ) {
+                val coversDir = File(context.filesDir, "covers").apply { if (!exists()) mkdirs() }
+                val coverFile = File(coversDir, "$bookId.jpg")
+                if (CbzParser.extractFirstPageThumbnail(finalFile, coverFile)) {
+                    customCoverPath = coverFile.absolutePath
+                }
             }
 
             // 6. Ensure "imported" category exists
@@ -208,7 +281,7 @@ class LocalImportBookRepository(
                 readingStatus = com.nocap.app.domain.model.DocumentReadingStatus.UNREAD,
                 userTitleOverride = null,
                 userAuthorOverride = null,
-                customCoverPath = null,
+                customCoverPath = customCoverPath,
                 lastOpenedAt = null,
                 addedAt = System.currentTimeMillis(),
                 originalFilename = suggestedFilename

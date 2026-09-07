@@ -15,18 +15,11 @@ object FormatSniffer {
     const val MIME_PDF = "application/pdf"
 
     fun sniff(file: File): PublicationFormat? {
-        if (!file.exists() || file.length() < 4) return null
-        return try {
-            FileInputStream(file).use { input ->
-                sniff(input, file)
-            }
-        } catch (_: Exception) {
-            sniffFromExtension(file.name)
-        }
+        return DocumentFormatDetector.detect(file)
     }
 
     fun sniff(headerBytes: ByteArray): PublicationFormat? {
-        if (headerBytes.size < 4) return null
+        if (headerBytes.size < 3) return null
         if (matchesMagic(headerBytes, PDF_MAGIC)) {
             return PublicationFormat.PDF
         }
@@ -37,6 +30,9 @@ object FormatSniffer {
     }
 
     fun sniff(inputStream: InputStream, fallbackFile: File? = null): PublicationFormat? {
+        if (fallbackFile != null) {
+            return DocumentFormatDetector.detect(fallbackFile)
+        }
         val header = ByteArray(4)
         val read = inputStream.read(header)
         if (read < 4) return null
@@ -45,9 +41,6 @@ object FormatSniffer {
             return PublicationFormat.PDF
         }
         if (matchesMagic(header, ZIP_MAGIC)) {
-            if (fallbackFile != null) {
-                return if (isEpubZip(fallbackFile)) PublicationFormat.EPUB else null
-            }
             return PublicationFormat.EPUB
         }
         return null
@@ -82,6 +75,13 @@ object FormatSniffer {
         return when (ext) {
             "epub" -> PublicationFormat.EPUB
             "pdf" -> PublicationFormat.PDF
+            "txt" -> PublicationFormat.TXT
+            "md", "markdown" -> PublicationFormat.MARKDOWN
+            "html", "htm" -> PublicationFormat.HTML
+            "docx" -> PublicationFormat.DOCX
+            "jpg", "jpeg" -> PublicationFormat.JPEG
+            "png" -> PublicationFormat.PNG
+            "webp" -> PublicationFormat.WEBP
             "cbz" -> PublicationFormat.CBZ
             else -> null
         }
@@ -93,25 +93,24 @@ object FormatSniffer {
         return when (clean) {
             MIME_EPUB -> PublicationFormat.EPUB
             MIME_PDF -> PublicationFormat.PDF
+            "text/plain" -> PublicationFormat.TXT
+            "text/markdown", "text/x-markdown" -> PublicationFormat.MARKDOWN
+            "text/html" -> PublicationFormat.HTML
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> PublicationFormat.DOCX
+            "image/jpeg" -> PublicationFormat.JPEG
+            "image/png" -> PublicationFormat.PNG
+            "image/webp" -> PublicationFormat.WEBP
             "application/x-cbz", "application/vnd.comicbook+zip" -> PublicationFormat.CBZ
             else -> null
         }
     }
 
     fun mimeTypeFor(format: PublicationFormat): String {
-        return when (format) {
-            PublicationFormat.EPUB -> MIME_EPUB
-            PublicationFormat.PDF -> MIME_PDF
-            PublicationFormat.CBZ -> "application/x-cbz"
-        }
+        return format.mediaType
     }
 
     fun extensionFor(format: PublicationFormat): String {
-        return when (format) {
-            PublicationFormat.EPUB -> "epub"
-            PublicationFormat.PDF -> "pdf"
-            PublicationFormat.CBZ -> "cbz"
-        }
+        return format.defaultExtension
     }
 
     private fun matchesMagic(data: ByteArray, magic: ByteArray): Boolean {

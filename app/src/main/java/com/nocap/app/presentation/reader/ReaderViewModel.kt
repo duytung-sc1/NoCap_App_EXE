@@ -26,6 +26,7 @@ import com.nocap.app.data.library.LocalLibraryRepository
 import com.nocap.app.data.preferences.LocalPerBookPreferencesRepository
 import com.nocap.app.data.reader.ReadiumPublicationManager
 import com.nocap.app.domain.model.Bookmark
+import com.nocap.app.domain.model.CatalogBook
 import com.nocap.app.domain.model.DownloadStatus
 import com.nocap.app.domain.model.PublicationFormat
 import com.nocap.app.domain.model.ReadingProgress
@@ -68,6 +69,11 @@ sealed interface ReaderUiState {
         val toc: List<TocItem>,
         val bookTitle: String,
         val format: PublicationFormat = PublicationFormat.EPUB
+    ) : ReaderUiState
+    data class CustomFormatReady(
+        val book: CatalogBook,
+        val file: File,
+        val format: PublicationFormat
     ) : ReaderUiState
     data object BookNotDownloaded : ReaderUiState
     data object FileNotFound : ReaderUiState
@@ -240,6 +246,18 @@ class ReaderViewModel(
 
             val catalogBook = catalogRepository.getBookById(bookId)
             val title = catalogBook?.title ?: file.nameWithoutExtension.ifBlank { "Ebook" }
+            val format = catalogBook?.format ?: FormatSniffer.sniff(file) ?: PublicationFormat.EPUB
+
+            if (format != PublicationFormat.EPUB && format != PublicationFormat.PDF) {
+                if (catalogBook != null) {
+                    _uiState.value = ReaderUiState.CustomFormatReady(
+                        book = catalogBook,
+                        file = file,
+                        format = format
+                    )
+                    return@launch
+                }
+            }
 
             val savedProgress = libraryRepository.observeBookProgress(bookId).first()
             val initialLocator = publicationManager.deserializeLocator(savedProgress?.locatorJson)

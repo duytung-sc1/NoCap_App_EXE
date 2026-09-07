@@ -137,6 +137,9 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.nocap.app.presentation.reader.archive.ImageArchiveReader
+import com.nocap.app.presentation.reader.image.ImageDocumentReader
+import com.nocap.app.presentation.reader.text.TextDocumentReader
 
 val HIGHLIGHT_YELLOW = Color(0xFFFFEB3B)
 val HIGHLIGHT_GREEN = Color(0xFF81C784)
@@ -166,6 +169,35 @@ fun ReaderScreen(
     val window = (context as? Activity)?.window
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    if (uiState is ReaderUiState.CustomFormatReady) {
+        val customState = uiState as ReaderUiState.CustomFormatReady
+        val customBook = customState.book
+        when {
+            customState.format.isTextBased -> {
+                TextDocumentReader(
+                    book = customBook,
+                    file = customState.file,
+                    onBackClick = onBackClick
+                )
+            }
+            customState.format.isSingleImage -> {
+                ImageDocumentReader(
+                    book = customBook,
+                    file = customState.file,
+                    onBackClick = onBackClick
+                )
+            }
+            customState.format.isComicArchive -> {
+                ImageArchiveReader(
+                    book = customBook,
+                    file = customState.file,
+                    onBackClick = onBackClick
+                )
+            }
+        }
+        return
+    }
     val preferences by viewModel.preferences.collectAsStateWithLifecycle()
     val bookmarks by viewModel.bookmarks.collectAsStateWithLifecycle()
     val highlights by viewModel.highlights.collectAsStateWithLifecycle()
@@ -431,6 +463,7 @@ fun ReaderScreen(
                 .background(barBackground)
         ) {
             when (val state = uiState) {
+                is ReaderUiState.CustomFormatReady -> {}
                 is ReaderUiState.Loading -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator()

@@ -58,9 +58,16 @@ class FormatDetectorTest {
         assertEquals(PublicationFormat.EPUB, FormatSniffer.sniffFromExtension("book.epub"))
         assertEquals(PublicationFormat.PDF, FormatSniffer.sniffFromExtension("document.PDF"))
         assertEquals(PublicationFormat.CBZ, FormatSniffer.sniffFromExtension("comic.cbz"))
+        assertEquals(PublicationFormat.TXT, FormatSniffer.sniffFromExtension("file.txt"))
+        assertEquals(PublicationFormat.MARKDOWN, FormatSniffer.sniffFromExtension("notes.md"))
+        assertEquals(PublicationFormat.HTML, FormatSniffer.sniffFromExtension("page.html"))
+        assertEquals(PublicationFormat.DOCX, FormatSniffer.sniffFromExtension("doc.docx"))
+        assertEquals(PublicationFormat.JPEG, FormatSniffer.sniffFromExtension("photo.jpg"))
+        assertEquals(PublicationFormat.PNG, FormatSniffer.sniffFromExtension("image.png"))
+        assertEquals(PublicationFormat.WEBP, FormatSniffer.sniffFromExtension("graphic.webp"))
         assertEquals(PublicationFormat.EPUB, FormatSniffer.sniffFromExtension("https://site.org/file.epub?token=abc#hash"))
         assertNull(FormatSniffer.sniffFromExtension("archive.zip"))
-        assertNull(FormatSniffer.sniffFromExtension("file.txt"))
+        assertNull(FormatSniffer.sniffFromExtension("spreadsheet.xlsx"))
     }
 
     @Test
@@ -69,7 +76,14 @@ class FormatDetectorTest {
         assertEquals(PublicationFormat.EPUB, FormatSniffer.sniffFromMimeType("application/epub+zip; charset=utf-8"))
         assertEquals(PublicationFormat.PDF, FormatSniffer.sniffFromMimeType("application/pdf"))
         assertEquals(PublicationFormat.CBZ, FormatSniffer.sniffFromMimeType("application/x-cbz"))
-        assertNull(FormatSniffer.sniffFromMimeType("text/plain"))
+        assertEquals(PublicationFormat.TXT, FormatSniffer.sniffFromMimeType("text/plain"))
+        assertEquals(PublicationFormat.MARKDOWN, FormatSniffer.sniffFromMimeType("text/markdown"))
+        assertEquals(PublicationFormat.HTML, FormatSniffer.sniffFromMimeType("text/html"))
+        assertEquals(PublicationFormat.DOCX, FormatSniffer.sniffFromMimeType("application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
+        assertEquals(PublicationFormat.JPEG, FormatSniffer.sniffFromMimeType("image/jpeg"))
+        assertEquals(PublicationFormat.PNG, FormatSniffer.sniffFromMimeType("image/png"))
+        assertEquals(PublicationFormat.WEBP, FormatSniffer.sniffFromMimeType("image/webp"))
+        assertNull(FormatSniffer.sniffFromMimeType("application/octet-stream"))
         assertNull(FormatSniffer.sniffFromMimeType(null))
     }
 

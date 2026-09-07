@@ -1,4 +1,4 @@
-﻿package com.nocap.app.presentation.library
+package com.nocap.app.presentation.library
 
 import android.content.Context
 import android.graphics.BitmapFactory
@@ -171,6 +171,12 @@ class MyLibraryViewModel(
                 LibrarySmartView.ARCHIVED -> tabFiltered // already filtered above
                 LibrarySmartView.EPUB -> tabFiltered.filter { it.book.format == PublicationFormat.EPUB }
                 LibrarySmartView.PDF -> tabFiltered.filter { it.book.format == PublicationFormat.PDF }
+                LibrarySmartView.TXT -> tabFiltered.filter { it.book.format == PublicationFormat.TXT }
+                LibrarySmartView.MARKDOWN -> tabFiltered.filter { it.book.format == PublicationFormat.MARKDOWN }
+                LibrarySmartView.HTML -> tabFiltered.filter { it.book.format == PublicationFormat.HTML }
+                LibrarySmartView.DOCX -> tabFiltered.filter { it.book.format == PublicationFormat.DOCX }
+                LibrarySmartView.IMAGE -> tabFiltered.filter { it.book.format.isSingleImage }
+                LibrarySmartView.CBZ -> tabFiltered.filter { it.book.format == PublicationFormat.CBZ }
                 LibrarySmartView.FROM_WEB -> tabFiltered.filter {
                     it.book.sourceType == PublicationSourceType.REMOTE_URL || it.book.sourceType == PublicationSourceType.SHARED_URL
                 }

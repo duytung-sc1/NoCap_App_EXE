@@ -1,4 +1,4 @@
-﻿package com.nocap.app.core.datastore
+package com.nocap.app.core.datastore
 
 enum class LibrarySort(val displayName: String) {
     RECENTLY_ADDED("Mới thêm"),
@@ -21,6 +21,12 @@ enum class LibrarySmartView(val displayName: String) {
     ARCHIVED("Lưu trữ"),
     EPUB("EPUB"),
     PDF("PDF"),
+    TXT("TXT"),
+    MARKDOWN("Markdown"),
+    HTML("HTML"),
+    DOCX("DOCX"),
+    IMAGE("Hình ảnh"),
+    CBZ("CBZ"),
     FROM_WEB("Từ Web")
 }
 

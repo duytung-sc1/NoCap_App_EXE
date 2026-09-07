@@ -22,7 +22,7 @@ class Milestone9aMultiFormatTest {
     @Test
     fun `test PublicationFormat enum values`() {
         val formats = PublicationFormat.entries
-        assertEquals(3, formats.size)
+        assertEquals(10, formats.size)
         assertTrue(formats.contains(PublicationFormat.EPUB))
         assertTrue(formats.contains(PublicationFormat.PDF))
         assertTrue(formats.contains(PublicationFormat.CBZ))
