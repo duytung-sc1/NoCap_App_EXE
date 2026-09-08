@@ -63,7 +63,7 @@ fun DiscoverScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "Discover",
+                        text = "Khám phá",
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold
                     )
@@ -93,14 +93,14 @@ fun DiscoverScreen(
                     onValueChange = viewModel::onSearchQueryChange,
                     placeholder = {
                         Text(
-                            "Search books, authors…",
+                            "Tìm sách, tác giả…",
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     },
                     leadingIcon = {
                         Icon(
                             imageVector = Icons.Default.Search,
-                            contentDescription = "Search",
+                            contentDescription = "Tìm kiếm",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     },
@@ -130,7 +130,7 @@ fun DiscoverScreen(
             // ── Results count label ──────────────────────────────────────────
             if (discoverState.searchQuery.isNotBlank()) {
                 Text(
-                    text = "${books.size} result${if (books.size != 1) "s" else ""} for \"${discoverState.searchQuery}\"",
+                    text = "${books.size} kết quả cho \"${discoverState.searchQuery}\"",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp)
@@ -148,13 +148,13 @@ fun DiscoverScreen(
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            text = "No books found",
+                            text = "Không tìm thấy sách",
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Try a different search or category",
+                            text = "Thử từ khóa hoặc thể loại khác",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -195,19 +195,19 @@ private fun CategoryFilterRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // "All" chip
+        // "Tất cả" chip
         item {
             FilterChip(
                 selected = selectedCategoryId == "all",
                 onClick = { onCategoryClick("all") },
-                label = { Text("All") }
+                label = { Text("Tất cả") }
             )
         }
         items(categories, key = { it.id }) { category ->
             FilterChip(
                 selected = selectedCategoryId == category.id,
                 onClick = { onCategoryClick(category.id) },
-                label = { Text(category.name) }
+                label = { Text(category.vietnameseName) }
             )
         }
     }

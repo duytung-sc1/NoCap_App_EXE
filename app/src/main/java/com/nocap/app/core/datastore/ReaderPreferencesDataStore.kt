@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.map
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "reader_preferences")
 
 class ReaderPreferencesDataStore(private val context: Context) {
+    internal val backupStore get() = context.dataStore
     companion object {
         private val KEY_THEME = stringPreferencesKey("reader_theme")
         private val KEY_FONT_FAMILY = stringPreferencesKey("reader_font_family")

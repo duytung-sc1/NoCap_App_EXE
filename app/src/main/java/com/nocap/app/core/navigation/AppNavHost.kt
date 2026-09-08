@@ -39,10 +39,17 @@ import com.nocap.app.presentation.catalog.DiscoverScreen
 import com.nocap.app.presentation.favorites.FavoritesScreen
 import com.nocap.app.presentation.home.HomeScreen
 import com.nocap.app.presentation.library.LibraryScreen
+import com.nocap.app.presentation.memory.ReadingMemoryScreen
+
+import com.nocap.app.presentation.memory.annotations.GlobalAnnotationsScreen
+import com.nocap.app.presentation.memory.review.ReviewQueueScreen
+import com.nocap.app.presentation.memory.search.KnowledgeSearchScreen
+import com.nocap.app.presentation.memory.stats.ReadingStatsScreen
 import com.nocap.app.presentation.reader.ReaderScreen
 import com.nocap.app.presentation.settings.SettingsScreen
 
 @Composable
+
 fun AppNavHost(
     pendingImportSource: PublicationSource? = null,
     onClearPendingImport: () -> Unit = {}
@@ -149,6 +156,60 @@ fun AppNavHost(
                 composable(Screen.Settings.route) {
                     SettingsScreen()
                 }
+                composable(Screen.Memory.route) {
+                    ReadingMemoryScreen(
+                        onNavigateToReader = { bookId, locatorJson ->
+                            navController.navigate(Screen.Reader.createRoute(bookId, locatorJson))
+                        },
+                        onNavigateToReviewQueue = {
+                            navController.navigate(Screen.ReviewQueue.route)
+                        },
+                        onNavigateToSearch = {
+                            navController.navigate(Screen.KnowledgeSearch.route)
+                        },
+                        onNavigateToGlobalAnnotations = {
+                            navController.navigate(Screen.GlobalAnnotations.route)
+                        },
+                        onNavigateToStats = {
+                            navController.navigate(Screen.ReadingStats.route)
+                        }
+                    )
+                }
+                composable(Screen.ReviewQueue.route) {
+                    ReviewQueueScreen(
+                        onBackClick = { navController.popBackStack() },
+                        onOpenSource = { bookId, locatorJson ->
+                            navController.navigate(Screen.Reader.createRoute(bookId, locatorJson))
+                        }
+                    )
+                }
+                composable(Screen.KnowledgeSearch.route) {
+                    KnowledgeSearchScreen(
+                        onBackClick = { navController.popBackStack() },
+                        onNavigateToReader = { bookId, locatorJson ->
+                            navController.navigate(Screen.Reader.createRoute(bookId, locatorJson))
+                        },
+                        onNavigateToBookDetails = { bookId ->
+                            navController.navigate(Screen.BookDetails.createRoute(bookId))
+                        }
+                    )
+                }
+                composable(Screen.GlobalAnnotations.route) {
+                    GlobalAnnotationsScreen(
+                        onBackClick = { navController.popBackStack() },
+                        onNavigateToReader = { bookId, locatorJson ->
+                            navController.navigate(Screen.Reader.createRoute(bookId, locatorJson))
+                        }
+                    )
+                }
+                composable(Screen.ReadingStats.route) {
+                    ReadingStatsScreen(
+                        onBackClick = { navController.popBackStack() },
+                        onNavigateToReader = { bookId ->
+                            navController.navigate(Screen.Reader.createRoute(bookId))
+                        }
+                    )
+                }
                 composable(
                     route = Screen.BookDetails.route,
                     arguments = listOf(navArgument("bookId") { type = NavType.StringType })
@@ -164,16 +225,26 @@ fun AppNavHost(
                 }
                 composable(
                     route = Screen.Reader.route,
-                    arguments = listOf(navArgument("bookId") { type = NavType.StringType })
+                    arguments = listOf(
+                        navArgument("bookId") { type = NavType.StringType },
+                        navArgument("locator") {
+                            type = NavType.StringType
+                            nullable = true
+                            defaultValue = null
+                        }
+                    )
                 ) { backStackEntry ->
                     val bookId = backStackEntry.arguments?.getString("bookId").orEmpty()
+                    val locator = backStackEntry.arguments?.getString("locator")
                     ReaderScreen(
                         bookId = bookId,
+                        initialLocatorJson = locator,
                         onBackClick = { navController.popBackStack() }
                     )
                 }
             }
         }
+
 
         if (isImportingShared) {
             Box(

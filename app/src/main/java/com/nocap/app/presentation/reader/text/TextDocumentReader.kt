@@ -27,7 +27,13 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -38,10 +44,17 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import com.nocap.app.core.database.entity.HighlightEntity
+import com.nocap.app.data.review.LocalReviewRepository
+import com.nocap.app.domain.session.ReadingSessionManager
+import com.nocap.app.presentation.reader.ColorPickerRow
+
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -58,6 +71,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -91,16 +106,19 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun TextDocumentReader(
     book: CatalogBook,
     file: File,
+    initialLocatorJson: String? = null,
     onBackClick: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val db = remember { AppDatabase.getInstance(context) }
+    val sessionManager = remember { ReadingSessionManager.getInstance(context.applicationContext) }
+    var sessionId by remember { mutableStateOf<String?>(null) }
 
     var document by remember { mutableStateOf<TextDocument?>(null) }
     var isLoading by remember { mutableStateOf(true) }
@@ -109,6 +127,7 @@ fun TextDocumentReader(
     var showControls by remember { mutableStateOf(true) }
     var showSettingsSheet by remember { mutableStateOf(false) }
     var showSearchSheet by remember { mutableStateOf(false) }
+    var selectedBlockForNote by remember { mutableStateOf<Pair<Int, TextDocumentBlock>?>(null) }
 
     var fontSizeSp by remember { mutableFloatStateOf(16f) }
     var theme by remember { mutableStateOf(ReaderTheme.LIGHT) }
@@ -123,6 +142,16 @@ fun TextDocumentReader(
 
     val listState = rememberLazyListState()
 
+    DisposableEffect(Unit) {
+        onDispose {
+            val total = document?.blocks?.size ?: 1
+            val finalProg = if (total > 0) (listState.firstVisibleItemIndex.toFloat() / total).coerceIn(0f, 1f) else 0f
+            sessionId?.let { sId ->
+                sessionManager.endSessionAsync(sId, finalProg)
+            }
+        }
+    }
+
     // Colors according to theme
     val (backgroundColor, textColor) = when (theme) {
         ReaderTheme.LIGHT -> Color(0xFFFFFFFF) to Color(0xFF1C1B1F)
@@ -135,18 +164,23 @@ fun TextDocumentReader(
         withContext(Dispatchers.IO) {
             try {
                 val progress = db.progressDao().getProgress(book.id)
-                val locator = progress?.locatorJson?.let { TextLocator.fromJson(it) }
+                val locator = initialLocatorJson?.let { TextLocator.fromJson(it) } ?: progress?.locatorJson?.let { TextLocator.fromJson(it) }
                 savedLocator = locator
+                sessionId = sessionManager.startSession(
+                    bookId = book.id,
+                    format = book.format.name,
+                    startProgress = locator?.progression ?: 0f
+                )
 
                 val parsedDoc = when (book.format) {
                     PublicationFormat.TXT -> TxtParser.validateAndParse(file, book.title)
                     PublicationFormat.MARKDOWN -> MarkdownParser.validateAndParse(file, book.title)
-                    PublicationFormat.HTML -> HtmlSanitizerParser.validateAndParse(file, book.title)
+                    PublicationFormat.HTML -> HtmlSanitizerParser.validateAndParse(file, book.title, mainContentOnly = book.sourceUrl?.startsWith("https://") == true)
                     PublicationFormat.DOCX -> {
                         val cacheDir = File(context.cacheDir, "docx_media").apply { if (!exists()) mkdirs() }
                         DocxParser.parse(file, cacheDir, book.title)
                     }
-                    else -> throw IllegalArgumentException("Định dạng không được hỗ trợ bởi TextDocumentReader: ${book.format}")
+                    else -> throw IllegalArgumentException("Trình đọc văn bản không hỗ trợ định dạng ${book.format}")
                 }
                 document = parsedDoc
 
@@ -169,6 +203,7 @@ fun TextDocumentReader(
                     }
                 }
             } catch (e: Exception) {
+
                 withContext(Dispatchers.Main) {
                     errorMessage = e.message ?: "Không thể mở tài liệu"
                     isLoading = false
@@ -214,7 +249,7 @@ fun TextDocumentReader(
             val totalBlocks = document?.blocks?.size ?: 1
             val progression = if (totalBlocks > 0) (idx.toFloat() / totalBlocks).coerceIn(0f, 1f) else 0f
             val locator = TextLocator(blockIndex = idx, characterOffset = 0, progression = progression)
-            scope.launch(Dispatchers.IO) {
+            ReadingSessionManager.processScope.launch {
                 db.progressDao().saveProgress(
                     ReadingProgressEntity(
                         bookId = book.id,
@@ -248,17 +283,21 @@ fun TextDocumentReader(
         } else {
             val doc = document!!
 
-            // Main readable content
+            val density = LocalDensity.current
+            var controlBarHeight by remember { mutableStateOf(112.dp) }
+
+            // Keep the reading viewport below the visible controls.
             LazyColumn(
                 state = listState,
                 modifier = Modifier
                     .fillMaxSize()
+                    .padding(top = if (showControls) controlBarHeight else 0.dp)
                     .clickable { showControls = !showControls }
                     .padding(horizontal = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 item {
-                    Spacer(modifier = Modifier.height(72.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     if (!doc.warningMessage.isNullOrBlank()) {
                         Surface(
                             shape = RoundedCornerShape(8.dp),
@@ -289,7 +328,16 @@ fun TextDocumentReader(
                                         .padding(4.dp)
                                 } else Modifier
                             )
+                            .combinedClickable(
+                                onClick = { showControls = !showControls },
+                                onLongClick = {
+                                    if (block.plainText.isNotBlank()) {
+                                        selectedBlockForNote = Pair(idx, block)
+                                    }
+                                }
+                            )
                     ) {
+
                         RenderBlock(
                             block = block,
                             fontSizeSp = fontSizeSp,
@@ -310,6 +358,9 @@ fun TextDocumentReader(
                 modifier = Modifier.align(Alignment.TopCenter)
             ) {
                 TopAppBar(
+                    modifier = Modifier.onSizeChanged {
+                        controlBarHeight = with(density) { it.height.toDp() }
+                    },
                     title = {
                         Text(
                             text = doc.title,
@@ -358,7 +409,7 @@ fun TextDocumentReader(
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = backgroundColor.copy(alpha = 0.95f),
+                        containerColor = backgroundColor,
                         titleContentColor = textColor,
                         actionIconContentColor = textColor,
                         navigationIconContentColor = textColor
@@ -478,7 +529,7 @@ fun TextDocumentReader(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             ThemeChip("Sáng", ReaderTheme.LIGHT, theme == ReaderTheme.LIGHT) { theme = ReaderTheme.LIGHT }
-                            ThemeChip("Sepia", ReaderTheme.SEPIA, theme == ReaderTheme.SEPIA) { theme = ReaderTheme.SEPIA }
+                            ThemeChip("Vàng giấy", ReaderTheme.SEPIA, theme == ReaderTheme.SEPIA) { theme = ReaderTheme.SEPIA }
                             ThemeChip("Tối", ReaderTheme.DARK, theme == ReaderTheme.DARK) { theme = ReaderTheme.DARK }
                         }
 
@@ -497,9 +548,83 @@ fun TextDocumentReader(
                     }
                 }
             }
+
+            selectedBlockForNote?.let { (idx, block) ->
+                var noteText by remember { mutableStateOf("") }
+                var selectedColor by remember { mutableStateOf("YELLOW") }
+                var addToReview by remember { mutableStateOf(false) }
+
+                AlertDialog(
+                    onDismissRequest = { selectedBlockForNote = null },
+                    title = { Text("Trích đoạn & Ghi chú") },
+                    text = {
+                        Column(
+                            modifier = Modifier.verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Text(
+                                text = "“" + block.plainText.take(200) + "”",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text("Chọn màu:", style = MaterialTheme.typography.labelMedium)
+                            ColorPickerRow(selectedColor = selectedColor, onColorSelected = { selectedColor = it })
+                            TextField(
+                                value = noteText,
+                                onValueChange = { noteText = it },
+                                placeholder = { Text("Thêm ghi chú (tùy chọn)...") },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Checkbox(checked = addToReview, onCheckedChange = { addToReview = it })
+                                Text("Thêm vào ôn tập hàng ngày", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        Button(onClick = {
+                            val totalBlocks = document?.blocks?.size ?: 1
+                            val prog = if (totalBlocks > 0) (idx.toFloat() / totalBlocks).coerceIn(0f, 1f) else 0f
+                            val locator = TextLocator(
+                                blockIndex = idx,
+                                characterOffset = 0,
+                                progression = prog,
+                                snippet = block.plainText.take(100)
+                            )
+                            val highlightId = UUID.randomUUID().toString()
+                            val highlight = HighlightEntity(
+                                id = highlightId,
+                                bookId = book.id,
+                                locatorJson = locator.toJson(),
+                                text = block.plainText,
+                                color = selectedColor,
+                                note = noteText.ifBlank { null }
+                            )
+                            scope.launch(Dispatchers.IO) {
+                                db.highlightDao().insertHighlight(highlight)
+                                if (addToReview || noteText.isNotBlank()) {
+                                    LocalReviewRepository(db.reviewDao()).addToReview(highlightId, book.id)
+                                }
+                            }
+                            selectedBlockForNote = null
+                        }) {
+                            Text("Lưu")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { selectedBlockForNote = null }) {
+                            Text("Hủy")
+                        }
+                    }
+                )
+            }
         }
     }
 }
+
 
 @Composable
 private fun ThemeChip(label: String, targetTheme: ReaderTheme, isSelected: Boolean, onClick: () -> Unit) {

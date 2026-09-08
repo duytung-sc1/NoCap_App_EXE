@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.map
 private val Context.libraryDataStore: DataStore<Preferences> by preferencesDataStore(name = "library_preferences")
 
 class LibraryPreferencesDataStore(private val context: Context) {
+    internal val backupStore get() = context.libraryDataStore
     companion object {
         private val KEY_SORT = stringPreferencesKey("library_sort")
         private val KEY_SMART_VIEW = stringPreferencesKey("library_smart_view")

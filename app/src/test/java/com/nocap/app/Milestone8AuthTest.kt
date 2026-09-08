@@ -1,6 +1,5 @@
 package com.nocap.app
 
-import com.google.firebase.auth.FirebaseAuthRecentLoginRequiredException
 import com.nocap.app.data.auth.AuthenticatedHttpClient
 import com.nocap.app.data.auth.BackendAccountRepository
 import com.nocap.app.domain.model.AuthState

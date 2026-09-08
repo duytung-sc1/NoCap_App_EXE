@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.google.firebase.auth.FirebaseAuthRecentLoginRequiredException
 import com.nocap.app.R
 import com.nocap.app.core.datastore.DevicePreferencesDataStore
 import com.nocap.app.core.datastore.ReaderFontFamily
@@ -13,9 +12,10 @@ import com.nocap.app.core.datastore.ReaderPreferencesDataStore
 import com.nocap.app.core.datastore.ReaderTextAlignment
 import com.nocap.app.core.datastore.ReaderTheme
 import com.nocap.app.data.auth.BackendAccountRepository
-import com.nocap.app.data.auth.FirebaseAuthRepository
+import com.nocap.app.data.auth.CloudAuthRepository
 import com.nocap.app.data.auth.GoogleSignInHelper
 import com.nocap.app.data.auth.LocalDeviceRepository
+import com.nocap.app.data.cloud.CloudBackupRepository
 import com.nocap.app.domain.model.AuthState
 import com.nocap.app.domain.model.AuthUser
 import com.nocap.app.domain.model.UserProfile
@@ -35,7 +35,8 @@ class SettingsViewModel(
     private val authRepository: AuthRepository,
     private val accountRepository: AccountRepository,
     private val deviceRepository: DeviceRepository,
-    private val googleSignInHelper: GoogleSignInHelper = GoogleSignInHelper()
+    private val googleSignInHelper: GoogleSignInHelper = GoogleSignInHelper(),
+    private val cloudBackup: CloudBackupRepository? = null
 ) : ViewModel() {
 
     val preferences: StateFlow<ReaderPreferences> = preferencesDataStore.readerPreferences
@@ -46,6 +47,21 @@ class SettingsViewModel(
         )
 
     val authState: StateFlow<AuthState> = authRepository.authState
+    val cloudBusy = MutableStateFlow(false)
+    val cloudMessage = MutableStateFlow<String?>(null)
+
+    fun backupLibrary() = runCloud { it.backup() }
+    fun restoreLibrary() = runCloud { it.restore() }
+    fun deleteCloudBackup() = runCloud { it.deleteBackup() }
+    private fun runCloud(action: suspend (CloudBackupRepository) -> Result<String>) {
+        if (cloudBusy.value) return
+        val repository = cloudBackup ?: return
+        cloudBusy.value = true
+        viewModelScope.launch {
+            try { val result = action(repository); cloudMessage.value = result.getOrElse { it.localizedMessage ?: "Thao tác thất bại" } }
+            finally { cloudBusy.value = false }
+        }
+    }
 
     private val _userProfile = MutableStateFlow<UserProfile?>(null)
     val userProfile: StateFlow<UserProfile?> = _userProfile.asStateFlow()
@@ -88,7 +104,7 @@ class SettingsViewModel(
             // Register device after successful profile fetch/auto-provision
             runCatching { deviceRepository.registerDevice() }
         }.onFailure { err ->
-            // DO NOT Firebase signOut if backend is offline/error
+            // Keep the local session on transient network errors
             _authUiState.value = _authUiState.value.copy(
                 isServerUnavailable = true,
                 serverStatusMessage = "Máy chủ backend chưa khả dụng: ${err.localizedMessage ?: "Mất kết nối"}"
@@ -179,8 +195,8 @@ class SettingsViewModel(
             _authUiState.value = AuthUiState(errorMessage = "Mật khẩu xác nhận không khớp")
             return
         }
-        if (pass.length < 6) {
-            _authUiState.value = AuthUiState(errorMessage = "Mật khẩu phải có ít nhất 6 ký tự")
+        if (pass.length < 12) {
+            _authUiState.value = AuthUiState(errorMessage = "Mật khẩu phải có ít nhất 12 ký tự")
             return
         }
 
@@ -284,7 +300,7 @@ class SettingsViewModel(
             accountRepository.updateProfile(displayName = name)
                 .onSuccess { updatedProfile ->
                     _userProfile.value = updatedProfile
-                    // Also synchronize Firebase displayName
+                    // Refresh the cached authentication profile
                     authRepository.updateProfile(displayName = name)
                     _authUiState.value = AuthUiState()
                     showEditProfileDialog.value = false
@@ -310,32 +326,11 @@ class SettingsViewModel(
         viewModelScope.launch {
             _authUiState.value = AuthUiState(isLoading = true)
 
-            // 1. Delete backend profile & devices
-            val backendResult = accountRepository.deleteProfile()
-            if (backendResult.isFailure) {
-                val err = backendResult.exceptionOrNull()
-                _authUiState.value = AuthUiState(
-                    errorMessage = "Không thể xóa hồ sơ trên máy chủ: ${err?.localizedMessage ?: "Lỗi kết nối"}"
-                )
+            val result = authRepository.deleteAccount()
+            if (result.isFailure) {
+                _authUiState.value = AuthUiState(errorMessage = result.exceptionOrNull()?.localizedMessage ?: "Không thể xóa tài khoản")
                 return@launch
             }
-
-            // 2. Delete Firebase account
-            val firebaseResult = authRepository.deleteAccount()
-            if (firebaseResult.isFailure) {
-                val err = firebaseResult.exceptionOrNull()
-                if (err is FirebaseAuthRecentLoginRequiredException || err?.message?.contains("recent", ignoreCase = true) == true) {
-                    _authUiState.value = AuthUiState(
-                        errorMessage = "Yêu cầu đăng nhập lại: Để xóa tài khoản, vui lòng đăng xuất và đăng nhập lại trước khi thực hiện."
-                    )
-                } else {
-                    _authUiState.value = AuthUiState(
-                        errorMessage = "Không thể xóa tài khoản Firebase: ${err?.localizedMessage ?: "Lỗi xác thực"}"
-                    )
-                }
-                return@launch
-            }
-
             // 3. Only on complete success: transition to Guest
             showDeleteAccountDialog.value = false
             _userProfile.value = null
@@ -391,7 +386,7 @@ class SettingsViewModel(
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 val appContext = context.applicationContext
-                val authRepo = FirebaseAuthRepository()
+                val authRepo = CloudAuthRepository.getInstance(appContext)
                 val accountRepo = BackendAccountRepository(tokenProvider = authRepo)
                 val deviceDataStore = DevicePreferencesDataStore(appContext)
                 val deviceRepo = LocalDeviceRepository(
@@ -404,7 +399,8 @@ class SettingsViewModel(
                     authRepository = authRepo,
                     accountRepository = accountRepo,
                     deviceRepository = deviceRepo,
-                    googleSignInHelper = GoogleSignInHelper()
+                    googleSignInHelper = GoogleSignInHelper(),
+                    cloudBackup = CloudBackupRepository(appContext)
                 ) as T
             }
         }

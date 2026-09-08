@@ -183,6 +183,16 @@ class RemotePublicationDownloader(
                 return@withContext Result.failure(ImportException.FileNotFound("Tệp tải về có kích thước 0 byte"))
             }
 
+            // Store only the readable article for web pages, never the site's full UI/links.
+            val prefix = tempFile.inputStream().use { input -> val bytes = ByteArray(1024); val count = input.read(bytes); String(bytes, 0, count.coerceAtLeast(0), Charsets.UTF_8) }
+            if (contentType?.substringBefore(';')?.trim()?.lowercase() in setOf("text/html", "application/xhtml+xml") ||
+                Regex("<(?:!doctype\\s+html|html|head|body)\\b", RegexOption.IGNORE_CASE).containsMatchIn(prefix)) {
+                if (tempFile.length() > 8L * 1024 * 1024) throw ImportException.DownloadFailed("Trang HTML quá lớn để trích xuất nội dung.")
+                val declaredCharset = body.contentType()?.charset(Charsets.UTF_8) ?: Charsets.UTF_8
+                val clean = com.nocap.app.data.parser.WebArticleExtractor.extract(tempFile.readText(declaredCharset))
+                tempFile.writeText(clean, Charsets.UTF_8)
+            }
+
             Result.success(
                 DownloadResult(
                     tempFile = tempFile,

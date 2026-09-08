@@ -104,7 +104,7 @@ fun BookCard(
                     color = MaterialTheme.colorScheme.primary
                 ) {
                     Text(
-                        text = "Premium",
+                        text = "Trả phí",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
@@ -121,7 +121,7 @@ fun BookCard(
                     color = MaterialTheme.colorScheme.tertiary
                 ) {
                     Text(
-                        text = "New",
+                        text = "Mới",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onTertiary,
                         modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)

@@ -71,7 +71,7 @@ class BookDownloadWorker(
 
             // If fileUrl is empty or blank, handle gracefully
             if (fileUrl.isBlank()) {
-                throw IllegalArgumentException("Download URL is blank for book: $bookId")
+                throw IllegalArgumentException("Sách chưa có liên kết tải")
             }
 
             // 2. Execute streaming request
@@ -82,10 +82,10 @@ class BookDownloadWorker(
 
             val response = okHttpClient.newCall(request).execute()
             if (!response.isSuccessful) {
-                throw IllegalStateException("HTTP download failed with code: ${response.code}")
+                throw IllegalStateException("Không tải được sách (mã lỗi ${response.code})")
             }
 
-            val body = response.body ?: throw IllegalStateException("Empty response body from server")
+            val body = response.body ?: throw IllegalStateException("Máy chủ trả về nội dung trống")
             val contentLength = body.contentLength()
             val totalBytes = if (contentLength > 0) contentLength else expectedSize
 
@@ -135,14 +135,14 @@ class BookDownloadWorker(
 
             // 3. Validation: Content-Length check
             if (contentLength > 0 && downloadedBytes != contentLength) {
-                throw IllegalStateException("Downloaded size ($downloadedBytes) does not match Content-Length ($contentLength)")
+                throw IllegalStateException("Tệp tải về không đầy đủ. Vui lòng tải lại.")
             }
 
             // 4. Validation: SHA-256 Hash check
             val computedHash = digest.digest().joinToString("") { "%02x".format(it) }
             if (!expectedHash.isNullOrBlank()) {
                 if (!computedHash.equals(expectedHash.trim(), ignoreCase = true)) {
-                    throw IllegalStateException("SHA-256 mismatch: expected $expectedHash, computed $computedHash")
+                    throw IllegalStateException("Tệp tải về không khớp dữ liệu gốc. Vui lòng tải lại.")
                 }
             }
 
@@ -189,7 +189,7 @@ class BookDownloadWorker(
                     downloadedContentVersion = expectedVersion,
                     contentHash = null,
                     downloadedAt = null,
-                    lastError = e.message ?: "Unknown download error"
+                    lastError = e.message ?: "Không thể tải sách. Vui lòng thử lại."
                 )
             )
             Result.failure()

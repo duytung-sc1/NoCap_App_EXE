@@ -76,6 +76,8 @@ fun ImageArchiveReader(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val db = remember { AppDatabase.getInstance(context) }
+    val sessionManager = remember { com.nocap.app.domain.session.ReadingSessionManager.getInstance(context.applicationContext) }
+    var sessionId by remember { mutableStateOf<String?>(null) }
 
     var pages by remember { mutableStateOf<List<CbzParser.CbzPage>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
@@ -84,6 +86,16 @@ fun ImageArchiveReader(
     var isBookmarked by remember { mutableStateOf(false) }
 
     val pagerState = rememberPagerState(pageCount = { pages.size })
+
+    DisposableEffect(Unit) {
+        onDispose {
+            val total = pages.size
+            val prog = if (total > 0) (pagerState.currentPage.toFloat() / total).coerceIn(0f, 1f) else 0f
+            sessionId?.let { sId ->
+                sessionManager.endSessionAsync(sId, prog)
+            }
+        }
+    }
 
     // 1. Enumerate pages and restore saved progress
     LaunchedEffect(book.id) {
@@ -100,7 +112,14 @@ fun ImageArchiveReader(
                 val progress = db.progressDao().getProgress(book.id)
                 val locator = progress?.locatorJson?.let { ArchiveLocator.fromJson(it) }
 
+                sessionId = sessionManager.startSession(
+                    bookId = book.id,
+                    format = book.format.name,
+                    startProgress = locator?.progression ?: 0f
+                )
+
                 val bms = db.bookmarkDao().getBookmarksForBook(book.id)
+
                 isBookmarked = bms.isNotEmpty()
 
                 withContext(Dispatchers.Main) {

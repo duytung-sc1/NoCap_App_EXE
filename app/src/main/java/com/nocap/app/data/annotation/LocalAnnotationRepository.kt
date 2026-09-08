@@ -47,7 +47,7 @@ class LocalAnnotationRepository(
 
     override suspend fun updateHighlightColor(highlightId: String, newColor: String): Result<Unit> {
         val existing = highlightDao.getHighlightById(highlightId)
-            ?: return Result.failure(IllegalArgumentException("Không tìm thấy highlight"))
+            ?: return Result.failure(IllegalArgumentException("Không tìm thấy đoạn tô sáng"))
         val updated = existing.copy(
             color = newColor,
             updatedAt = System.currentTimeMillis()
@@ -62,7 +62,7 @@ class LocalAnnotationRepository(
 
     override suspend fun updateNote(highlightId: String, note: String?): Result<Unit> {
         val existing = highlightDao.getHighlightById(highlightId)
-            ?: return Result.failure(IllegalArgumentException("Không tìm thấy highlight"))
+            ?: return Result.failure(IllegalArgumentException("Không tìm thấy đoạn tô sáng"))
         val updated = existing.copy(
             note = note?.trim()?.ifBlank { null },
             updatedAt = System.currentTimeMillis()

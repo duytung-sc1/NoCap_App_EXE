@@ -20,6 +20,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 
 class MainActivity : FragmentActivity() {
 
+    override fun attachBaseContext(newBase: android.content.Context) {
+        val configuration = android.content.res.Configuration(newBase.resources.configuration)
+        configuration.setLocale(java.util.Locale.forLanguageTag("vi-VN"))
+        super.attachBaseContext(newBase.createConfigurationContext(configuration))
+    }
+
+
     private val pendingSharedSource = MutableStateFlow<PublicationSource?>(null)
     var volumeKeyListener: ((Int) -> Boolean)? = null
 

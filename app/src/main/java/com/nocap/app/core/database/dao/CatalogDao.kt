@@ -1,4 +1,4 @@
-﻿package com.nocap.app.core.database.dao
+package com.nocap.app.core.database.dao
 
 import androidx.room.Dao
 import androidx.room.Insert
@@ -19,6 +19,10 @@ interface CatalogDao {
 
     @Query("SELECT * FROM catalog_books")
     fun observeAllBooks(): Flow<List<CatalogBookEntity>>
+
+    @Query("SELECT * FROM catalog_books")
+    suspend fun getAllBooks(): List<CatalogBookEntity>
+
 
     @Query("SELECT * FROM catalog_books WHERE is_featured = 1")
     fun observeFeaturedBooks(): Flow<List<CatalogBookEntity>>

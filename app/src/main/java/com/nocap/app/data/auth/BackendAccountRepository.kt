@@ -1,5 +1,6 @@
 package com.nocap.app.data.auth
 
+import com.nocap.app.BuildConfig
 import com.nocap.app.domain.model.UserProfile
 import com.nocap.app.domain.repository.AccountRepository
 import com.nocap.app.domain.repository.AuthTokenProvider
@@ -9,7 +10,7 @@ import org.json.JSONObject
 
 class BackendAccountRepository(
     tokenProvider: AuthTokenProvider,
-    private val baseUrl: String = "http://127.0.0.1:8080"
+    private val baseUrl: String = BuildConfig.BACKEND_BASE_URL
 ) : AccountRepository {
 
     private val httpClient = AuthenticatedHttpClient(tokenProvider)

@@ -46,13 +46,13 @@ class ReadiumPublicationManager(
         val assetResult = assetRetriever.retrieve(file)
         val asset = assetResult.getOrNull()
             ?: return Result.failure(
-                IllegalStateException("Failed to retrieve asset from file: ${assetResult.failureOrNull()?.message}")
+                IllegalStateException("Không thể đọc tệp sách. Vui lòng kiểm tra hoặc nhập lại tệp.")
             )
 
         val pubResult = publicationOpener.open(asset = asset, allowUserInteraction = false)
         val publication = pubResult.getOrNull()
             ?: return Result.failure(
-                IllegalStateException("Failed to parse publication: ${pubResult.failureOrNull()?.message}")
+                IllegalStateException("Không thể mở nội dung sách. Tệp có thể bị hỏng hoặc không được hỗ trợ.")
             )
 
         return Result.success(publication)
@@ -62,12 +62,30 @@ class ReadiumPublicationManager(
         return locator.toJSON().toString()
     }
 
-    fun deserializeLocator(json: String?): Locator? {
+    fun deserializeLocator(json: String?, publication: Publication? = null): Locator? {
         if (json.isNullOrBlank()) return null
-        return runCatching {
+        val standard = runCatching {
             Locator.fromJSON(JSONObject(json))
         }.getOrNull()
+        if (standard != null) return standard
+
+        val docLoc = com.nocap.app.domain.model.DocumentLocator.fromJson(json)
+        if (docLoc is com.nocap.app.domain.model.PdfAnnotationLocator && publication != null) {
+            val link = publication.readingOrder.firstOrNull() ?: publication.linkWithRel("contents")
+            if (link != null) {
+                return Locator(
+                    href = link.url(),
+                    mediaType = link.mediaType ?: org.readium.r2.shared.util.mediatype.MediaType.PDF,
+                    locations = Locator.Locations(
+                        position = docLoc.pageNumber,
+                        progression = docLoc.progression.toDouble()
+                    )
+                )
+            }
+        }
+        return null
     }
+
 
     fun extractTableOfContents(publication: Publication): List<TocItem> {
         return publication.tableOfContents.map { mapLinkToToc(it) }

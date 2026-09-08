@@ -84,6 +84,22 @@ fun SettingsScreen(
     val authState by viewModel.authState.collectAsStateWithLifecycle()
     val userProfile by viewModel.userProfile.collectAsStateWithLifecycle()
     val authUiState by viewModel.authUiState.collectAsStateWithLifecycle()
+    val cloudBusy by viewModel.cloudBusy.collectAsStateWithLifecycle()
+    val cloudMessage by viewModel.cloudMessage.collectAsStateWithLifecycle()
+    var cloudAction by remember { mutableStateOf<String?>(null) }
+
+    if (cloudAction != null) {
+        AlertDialog(onDismissRequest = { cloudAction = null },
+            title = { Text(if (cloudAction == "restore") "Khôi phục thư viện?" else if (cloudAction == "delete") "Xóa bản sao lưu?" else "Sao lưu thư viện?") },
+            text = { Text(if (cloudAction == "restore") "Thư viện hiện tại sẽ được thay bằng bản sao lưu trên tài khoản này. Hãy sao lưu dữ liệu cần giữ trước khi tiếp tục."
+                else if (cloudAction == "delete") "Bản sao lưu trên đám mây sẽ bị xóa. Dữ liệu trong máy vẫn được giữ."
+                else "Sách, ghi chú, tiến độ và bộ sưu tập trên máy sẽ được tải lên tài khoản đang đăng nhập. Bản sao lưu gần nhất sẽ được thay thế.") },
+            confirmButton = { TextButton(onClick = {
+                when (cloudAction) { "restore" -> viewModel.restoreLibrary(); "delete" -> viewModel.deleteCloudBackup(); else -> viewModel.backupLibrary() }
+                cloudAction = null
+            }) { Text("Tiếp tục") } },
+            dismissButton = { TextButton(onClick = { cloudAction = null }) { Text("Hủy") } })
+    }
 
     val showLogin by viewModel.showLoginDialog.collectAsStateWithLifecycle()
     val showRegister by viewModel.showRegisterDialog.collectAsStateWithLifecycle()
@@ -130,6 +146,22 @@ fun SettingsScreen(
                 .padding(horizontal = 20.dp, vertical = 12.dp)
         ) {
             // SECTION 0: TÀI KHOẢN (ACCOUNT / AUTH - M8B)
+            if (authState is AuthState.Authenticated) {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("Thư viện đám mây", fontWeight = FontWeight.Bold)
+                        Text("Sao lưu và khôi phục sách, ghi chú, tiến độ, thẻ và bộ sưu tập.")
+                        if (cloudBusy) CircularProgressIndicator(Modifier.padding(8.dp))
+                        cloudMessage?.let { Text(it, modifier = Modifier.padding(vertical = 8.dp)) }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(enabled = !cloudBusy, onClick = { cloudAction = "backup" }) { Text("Sao lưu") }
+                            OutlinedButton(enabled = !cloudBusy, onClick = { cloudAction = "restore" }) { Text("Khôi phục") }
+                        }
+                        TextButton(enabled = !cloudBusy, onClick = { cloudAction = "delete" }) { Text("Xóa bản sao lưu") }
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+            }
             Text(
                 text = "Tài khoản",
                 style = MaterialTheme.typography.titleMedium,
@@ -178,7 +210,7 @@ fun SettingsScreen(
                                         fontWeight = FontWeight.Bold
                                     )
                                     Text(
-                                        text = "Đăng nhập để bảo vệ và đồng bộ dữ liệu của bạn",
+                                        text = "Đăng nhập để sao lưu và khôi phục thư viện của bạn",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -234,7 +266,7 @@ fun SettingsScreen(
                                         color = MaterialTheme.colorScheme.error
                                     )
                                     Text(
-                                        text = "Đã gửi link tới: ${user.email.orEmpty()}",
+                                        text = "Kiểm tra hộp thư ${user.email.orEmpty()} hoặc nhấn Gửi lại link.",
                                         style = MaterialTheme.typography.bodySmall
                                     )
                                 }
@@ -349,7 +381,7 @@ fun SettingsScreen(
                                 if (!effectivePhotoUrl.isNullOrBlank()) {
                                     AsyncImage(
                                         model = effectivePhotoUrl,
-                                        contentDescription = "Avatar",
+                                        contentDescription = "Ảnh đại diện",
                                         modifier = Modifier
                                             .size(52.dp)
                                             .clip(CircleShape)
@@ -394,7 +426,7 @@ fun SettingsScreen(
                                         )
                                         Spacer(modifier = Modifier.width(4.dp))
                                         Text(
-                                            text = if (user.providerId == "google.com") "Google Account" else "Email đã xác thực",
+                                            text = if (user.providerId == "google.com") "Tài khoản Google" else "Email đã xác thực",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = Color(0xFF4CAF50),
                                             fontWeight = FontWeight.SemiBold
@@ -499,7 +531,7 @@ fun SettingsScreen(
                             modifier = Modifier.weight(1f)
                         )
                         SettingsThemeCard(
-                            name = "Sepia",
+                            name = "Vàng giấy",
                             bgColor = Color(0xFFF4ECD8),
                             textColor = Color(0xFF5B4636),
                             isSelected = preferences.theme == ReaderTheme.SEPIA,
@@ -583,12 +615,12 @@ fun SettingsScreen(
                         FilterChip(
                             selected = preferences.fontFamily == ReaderFontFamily.SERIF,
                             onClick = { viewModel.updateFontFamily(ReaderFontFamily.SERIF) },
-                            label = { Text("Serif", fontFamily = FontFamily.Serif) }
+                            label = { Text("Có chân", fontFamily = FontFamily.Serif) }
                         )
                         FilterChip(
                             selected = preferences.fontFamily == ReaderFontFamily.SANS_SERIF,
                             onClick = { viewModel.updateFontFamily(ReaderFontFamily.SANS_SERIF) },
-                            label = { Text("Sans-Serif", fontFamily = FontFamily.SansSerif) }
+                            label = { Text("Không chân", fontFamily = FontFamily.SansSerif) }
                         )
                     }
 
@@ -672,7 +704,7 @@ fun SettingsScreen(
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            text = "Đặt lại cỡ chữ 100%, theme sáng và kiểu chữ mặc định",
+                            text = "Đặt lại cỡ chữ 100%, giao diện sáng và kiểu chữ mặc định",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -746,7 +778,7 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = "Reader Engine",
+                            text = "Bộ đọc sách",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

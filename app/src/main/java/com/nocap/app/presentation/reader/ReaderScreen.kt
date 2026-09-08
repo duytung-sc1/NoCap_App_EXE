@@ -24,6 +24,9 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -55,8 +58,10 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -80,6 +85,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -159,11 +165,13 @@ fun getHighlightTint(colorName: String): Int {
 @Composable
 fun ReaderScreen(
     bookId: String,
+    initialLocatorJson: String? = null,
     onBackClick: () -> Unit,
     viewModel: ReaderViewModel = viewModel(
-        factory = ReaderViewModel.provideFactory(bookId, LocalContext.current)
+        factory = ReaderViewModel.provideFactory(bookId, LocalContext.current, initialLocatorJson)
     )
 ) {
+
     val context = LocalContext.current
     val activity = context as? MainActivity
     val window = (context as? Activity)?.window
@@ -178,9 +186,11 @@ fun ReaderScreen(
                 TextDocumentReader(
                     book = customBook,
                     file = customState.file,
+                    initialLocatorJson = initialLocatorJson,
                     onBackClick = onBackClick
                 )
             }
+
             customState.format.isSingleImage -> {
                 ImageDocumentReader(
                     book = customBook,
@@ -220,8 +230,15 @@ fun ReaderScreen(
     var pendingSelectionLocator by remember { mutableStateOf<Locator?>(null) }
     var showAddNoteDialog by remember { mutableStateOf(false) }
 
+    val scope = rememberCoroutineScope()
+    var showPdfTextExtractDialog by remember { mutableStateOf(false) }
+    var pdfExtractedText by remember { mutableStateOf<String?>(null) }
+    var pdfExtractPageIndex by remember { mutableIntStateOf(0) }
+    var showPdfScannedAlert by remember { mutableStateOf(false) }
+
     var navigatorFragment by remember { mutableStateOf<VisualNavigator?>(null) }
     var lastKnownLocator by remember { mutableStateOf<Locator?>(null) }
+
 
     val (barBackground, barContentColor) = when (preferences.theme) {
         ReaderTheme.LIGHT -> Color(0xFFFFFFFF) to Color(0xFF1C1B1F)
@@ -239,6 +256,12 @@ fun ReaderScreen(
     }
 
     BackHandler(onBack = handleBack)
+
+    DisposableEffect(Unit) {
+        onDispose {
+            viewModel.endActiveSession()
+        }
+    }
 
     LaunchedEffect(preferences, navigatorFragment) {
         (navigatorFragment as? EpubNavigatorFragment)?.submitPreferences(preferences.toReadiumPreferences())
@@ -423,9 +446,27 @@ fun ReaderScreen(
                         }
                     },
                     actions = {
+                        if ((uiState as? ReaderUiState.Ready)?.format == PublicationFormat.PDF) {
+                            IconButton(onClick = {
+                                val pageIndex = (lastKnownLocator?.locations?.position?.minus(1) ?: 0).coerceAtLeast(0)
+                                pdfExtractPageIndex = pageIndex
+                                scope.launch {
+                                    val result = viewModel.extractPdfPageText(pageIndex)
+                                    if (result == null || result.text.isBlank()) {
+                                        showPdfScannedAlert = true
+                                    } else {
+                                        pdfExtractedText = result.text
+                                        showPdfTextExtractDialog = true
+                                    }
+                                }
+                            }) {
+                                Icon(Icons.Default.Edit, contentDescription = "Trích xuất văn bản", tint = barContentColor)
+                            }
+                        }
                         IconButton(onClick = { showSearchSheet = true }) {
                             Icon(Icons.Default.Search, contentDescription = "Tìm kiếm trong sách", tint = barContentColor)
                         }
+
                         IconButton(onClick = { showAnnotationsSheet = true }) {
                             Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Đánh dấu & ghi chú", tint = barContentColor)
                         }
@@ -695,6 +736,7 @@ fun ReaderScreen(
         val locator = pendingSelectionLocator!!
         var noteText by remember { mutableStateOf("") }
         var selectedColor by remember { mutableStateOf("YELLOW") }
+        var addToReview by remember { mutableStateOf(false) }
 
         AlertDialog(
             onDismissRequest = {
@@ -719,6 +761,13 @@ fun ReaderScreen(
                         placeholder = { Text("Nhập nội dung ghi chú...") },
                         modifier = Modifier.fillMaxWidth()
                     )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Checkbox(checked = addToReview, onCheckedChange = { addToReview = it })
+                        Text("Thêm vào ôn tập hàng ngày", style = MaterialTheme.typography.bodySmall)
+                    }
                 }
             },
             confirmButton = {
@@ -726,7 +775,8 @@ fun ReaderScreen(
                     viewModel.addHighlight(
                         locator = locator,
                         colorHex = selectedColor,
-                        note = noteText.ifBlank { null }
+                        note = noteText.ifBlank { null },
+                        addToReview = addToReview
                     )
                     showAddNoteDialog = false
                     pendingSelectionLocator = null
@@ -744,6 +794,94 @@ fun ReaderScreen(
             }
         )
     }
+
+    if (showPdfScannedAlert) {
+        AlertDialog(
+            onDismissRequest = { showPdfScannedAlert = false },
+            title = { Text("Không có văn bản để chọn") },
+            text = {
+                Text(
+                    "Tài liệu PDF này ở dạng scan hoặc ảnh và không chứa lớp văn bản số. NoCap tôn trọng tính nguyên bản của tài liệu và không giả lập nhận dạng ký tự (OCR)."
+                )
+            },
+            confirmButton = {
+                Button(onClick = { showPdfScannedAlert = false }) {
+                    Text("Đã hiểu")
+                }
+            }
+        )
+    }
+
+    if (showPdfTextExtractDialog && pdfExtractedText != null) {
+        val pageText = pdfExtractedText!!
+        var selectedSnippet by remember { mutableStateOf(pageText.take(300)) }
+        var noteText by remember { mutableStateOf("") }
+        var selectedColor by remember { mutableStateOf("YELLOW") }
+        var addToReview by remember { mutableStateOf(false) }
+
+        AlertDialog(
+            onDismissRequest = { showPdfTextExtractDialog = false },
+            title = { Text("Trích đoạn & Ghi chú (Trang ${pdfExtractPageIndex + 1})") },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text("Văn bản trích dẫn:", style = MaterialTheme.typography.labelMedium)
+                    TextField(
+                        value = selectedSnippet,
+                        onValueChange = { selectedSnippet = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 5
+                    )
+                    Text("Màu tô sáng:", style = MaterialTheme.typography.labelMedium)
+                    ColorPickerRow(selectedColor = selectedColor, onColorSelected = { selectedColor = it })
+                    TextField(
+                        value = noteText,
+                        onValueChange = { noteText = it },
+                        placeholder = { Text("Thêm ghi chú (tùy chọn)...") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Checkbox(checked = addToReview, onCheckedChange = { addToReview = it })
+                        Text("Thêm vào ôn tập hàng ngày", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    val locator = com.nocap.app.domain.model.PdfAnnotationLocator(
+                        pageIndex = pdfExtractPageIndex,
+                        pageNumber = pdfExtractPageIndex + 1,
+                        progression = (lastKnownLocator?.locations?.progression ?: 0.0).toFloat(),
+                        selectedText = selectedSnippet,
+                        startOffset = 0,
+                        endOffset = selectedSnippet.length,
+                        contextSnippet = pageText.take(150)
+                    )
+                    viewModel.addHighlight(
+                        text = selectedSnippet,
+                        colorHex = selectedColor,
+                        locatorJson = locator.toJson(),
+                        note = noteText.ifBlank { null },
+                        addToReview = addToReview
+                    )
+                    showPdfTextExtractDialog = false
+                }) {
+                    Text("Lưu trích dẫn")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPdfTextExtractDialog = false }) {
+                    Text("Hủy")
+                }
+            }
+        )
+    }
+
 
     selectedHighlightForEdit?.let { h ->
         var noteText by remember { mutableStateOf(h.note ?: "") }
@@ -1553,7 +1691,7 @@ fun ReaderSettingsSheetContent(
                 listOf(
                     Triple(ReaderTheme.LIGHT, "Sáng", Color(0xFFF5F5F5) to Color(0xFF1C1B1F)),
                     Triple(ReaderTheme.DARK, "Tối", Color(0xFF1E1E1E) to Color(0xFFE6E1E5)),
-                    Triple(ReaderTheme.SEPIA, "Sepia", Color(0xFFF4ECD8) to Color(0xFF5B4636))
+                    Triple(ReaderTheme.SEPIA, "Vàng giấy", Color(0xFFF4ECD8) to Color(0xFF5B4636))
                 ).forEach { (t, label, colors) ->
                     val isSelected = preferences.theme == t
                     Surface(
@@ -1603,14 +1741,14 @@ fun ReaderSettingsSheetContent(
                         FilterChip(
                             selected = preferences.fontFamily == ReaderFontFamily.SERIF,
                             onClick = { onUpdateFontFamily(ReaderFontFamily.SERIF, null) },
-                            label = { Text("Serif") }
+                            label = { Text("Có chân") }
                         )
                     }
                     item {
                         FilterChip(
                             selected = preferences.fontFamily == ReaderFontFamily.SANS_SERIF,
                             onClick = { onUpdateFontFamily(ReaderFontFamily.SANS_SERIF, null) },
-                            label = { Text("Sans-Serif") }
+                            label = { Text("Không chân") }
                         )
                     }
                     item {

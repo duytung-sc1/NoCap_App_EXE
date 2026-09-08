@@ -1,6 +1,7 @@
 package com.nocap.app.data.auth
 
 import android.os.Build
+import com.nocap.app.BuildConfig
 import com.nocap.app.core.datastore.DevicePreferencesDataStore
 import com.nocap.app.domain.repository.AuthTokenProvider
 import com.nocap.app.domain.repository.DeviceRepository
@@ -11,7 +12,7 @@ import org.json.JSONObject
 class LocalDeviceRepository(
     private val devicePreferencesDataStore: DevicePreferencesDataStore,
     tokenProvider: AuthTokenProvider,
-    private val baseUrl: String = "http://127.0.0.1:8080",
+    private val baseUrl: String = BuildConfig.BACKEND_BASE_URL,
     private val appVersion: String = "1.0.0"
 ) : DeviceRepository {
 

@@ -31,8 +31,9 @@ class Milestone3IntegrationTest {
 
     @Test
     fun testFavorites_fullLifecycle_add_query_toggle_remove() = runTest {
+        val testBookId = com.nocap.app.data.catalog.SeedCatalogDataSource.books.first().id
         val seedRepo = LocalCatalogRepository()
-        val book = seedRepo.getBookById("book-001")
+        val book = seedRepo.getBookById(testBookId)
         assertNotNull(book)
 
         // Mock state tracking like Room FavoriteDao
@@ -52,21 +53,21 @@ class Milestone3IntegrationTest {
         }
 
         // 1. Initial: Not favorite
-        assertFalse(isFav("book-001"))
+        assertFalse(isFav(testBookId))
 
         // 2. Add Favorite
-        val added = toggleFav("book-001")
+        val added = toggleFav(testBookId)
         assertTrue(added)
-        assertTrue(isFav("book-001"))
+        assertTrue(isFav(testBookId))
 
         // 3. Simulate app restart: favoriteStorage retains data
         assertEquals(1, favoriteStorage.size)
-        assertTrue(favoriteStorage.contains("book-001"))
+        assertTrue(favoriteStorage.contains(testBookId))
 
         // 4. Toggle again -> Removed
-        val removed = toggleFav("book-001")
+        val removed = toggleFav(testBookId)
         assertFalse(removed)
-        assertFalse(isFav("book-001"))
+        assertFalse(isFav(testBookId))
         assertEquals(0, favoriteStorage.size)
     }
 

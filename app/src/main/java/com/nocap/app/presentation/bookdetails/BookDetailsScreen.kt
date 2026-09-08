@@ -192,7 +192,7 @@ fun BookDetailsScreen(
                             color = MaterialTheme.colorScheme.primaryContainer
                         ) {
                             Text(
-                                text = book.categoryId.replaceFirstChar { it.uppercase() },
+                                text = com.nocap.app.domain.model.Category(book.categoryId, book.categoryId).vietnameseName,
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
@@ -205,7 +205,7 @@ fun BookDetailsScreen(
                                 color = MaterialTheme.colorScheme.secondaryContainer
                             ) {
                                 Text(
-                                    text = "Premium",
+                                    text = "Trả phí",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)

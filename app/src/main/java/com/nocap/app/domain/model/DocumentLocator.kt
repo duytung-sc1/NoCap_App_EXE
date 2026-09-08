@@ -27,6 +27,15 @@ sealed interface DocumentLocator {
                     "IMAGE" -> ImageLocator(
                         progression = json.optDouble("progression", 0.0).toFloat()
                     )
+                    "PDF" -> PdfAnnotationLocator(
+                        pageIndex = json.optInt("pageIndex", 0),
+                        pageNumber = json.optInt("pageNumber", json.optInt("pageIndex", 0) + 1),
+                        progression = json.optDouble("progression", 0.0).toFloat(),
+                        selectedText = json.optString("selectedText", ""),
+                        startOffset = json.optInt("startOffset", 0),
+                        endOffset = json.optInt("endOffset", 0),
+                        contextSnippet = json.optString("contextSnippet").takeIf { it.isNotEmpty() }
+                    )
                     else -> null
                 }
             } catch (_: Exception) {
@@ -88,5 +97,32 @@ data class ImageLocator(
     companion object {
         fun fromJson(jsonStr: String): ImageLocator? =
             DocumentLocator.fromJson(jsonStr) as? ImageLocator
+    }
+}
+
+data class PdfAnnotationLocator(
+    val pageIndex: Int = 0,
+    val pageNumber: Int = pageIndex + 1,
+    override val progression: Float = 0f,
+    val selectedText: String = "",
+    val startOffset: Int = 0,
+    val endOffset: Int = 0,
+    val contextSnippet: String? = null
+) : DocumentLocator {
+    override fun toJson(): String = JSONObject().apply {
+        put("type", "PDF")
+        put("version", 1)
+        put("pageIndex", pageIndex)
+        put("pageNumber", pageNumber)
+        put("progression", progression.toDouble())
+        put("selectedText", selectedText)
+        put("startOffset", startOffset)
+        put("endOffset", endOffset)
+        if (!contextSnippet.isNullOrBlank()) put("contextSnippet", contextSnippet)
+    }.toString()
+
+    companion object {
+        fun fromJson(jsonStr: String): PdfAnnotationLocator? =
+            DocumentLocator.fromJson(jsonStr) as? PdfAnnotationLocator
     }
 }

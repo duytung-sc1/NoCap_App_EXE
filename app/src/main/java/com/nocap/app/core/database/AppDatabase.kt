@@ -1,4 +1,4 @@
-﻿package com.nocap.app.core.database
+package com.nocap.app.core.database
 
 import android.content.Context
 import androidx.room.Database
@@ -27,6 +27,10 @@ import com.nocap.app.core.database.entity.FavoriteEntity
 import com.nocap.app.core.database.entity.HighlightEntity
 import com.nocap.app.core.database.entity.PerBookPreferencesEntity
 import com.nocap.app.core.database.entity.ReadingProgressEntity
+import com.nocap.app.core.database.dao.ReadingSessionDao
+import com.nocap.app.core.database.dao.ReviewDao
+import com.nocap.app.core.database.entity.ReadingSessionEntity
+import com.nocap.app.core.database.entity.ReviewItemEntity
 import com.nocap.app.core.database.entity.TagEntity
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
@@ -45,9 +49,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         PerBookPreferencesEntity::class,
         CustomFontEntity::class,
         TagEntity::class,
-        BookTagCrossRef::class
+        BookTagCrossRef::class,
+        ReviewItemEntity::class,
+        ReadingSessionEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -62,6 +68,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun perBookPreferencesDao(): PerBookPreferencesDao
     abstract fun customFontDao(): CustomFontDao
     abstract fun tagDao(): TagDao
+    abstract fun reviewDao(): ReviewDao
+    abstract fun readingSessionDao(): ReadingSessionDao
 
     companion object {
         @Volatile
@@ -221,13 +229,57 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // 1. Create review_items table
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS review_items (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        annotation_id TEXT NOT NULL,
+                        book_id TEXT NOT NULL,
+                        is_enabled INTEGER NOT NULL DEFAULT 1,
+                        next_review_at INTEGER NOT NULL,
+                        last_reviewed_at INTEGER DEFAULT NULL,
+                        review_count INTEGER NOT NULL DEFAULT 0,
+                        interval_days INTEGER NOT NULL DEFAULT 1,
+                        ease_factor REAL NOT NULL DEFAULT 2.5,
+                        created_at INTEGER NOT NULL,
+                        updated_at INTEGER NOT NULL,
+                        FOREIGN KEY(annotation_id) REFERENCES highlights(id) ON DELETE CASCADE,
+                        FOREIGN KEY(book_id) REFERENCES catalog_books(id) ON DELETE CASCADE
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_review_items_annotation_id ON review_items(annotation_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_review_items_book_id ON review_items(book_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_review_items_next_review_at ON review_items(next_review_at)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_review_items_is_enabled ON review_items(is_enabled)")
+
+                // 2. Create reading_sessions table
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS reading_sessions (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        book_id TEXT NOT NULL,
+                        started_at INTEGER NOT NULL,
+                        ended_at INTEGER DEFAULT NULL,
+                        duration_ms INTEGER NOT NULL DEFAULT 0,
+                        start_progress REAL NOT NULL DEFAULT 0.0,
+                        end_progress REAL NOT NULL DEFAULT 0.0,
+                        format TEXT NOT NULL,
+                        FOREIGN KEY(book_id) REFERENCES catalog_books(id) ON DELETE CASCADE
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_reading_sessions_book_id ON reading_sessions(book_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_reading_sessions_started_at ON reading_sessions(started_at)")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
                     "ebook_reader.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build().also { INSTANCE = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build().also { INSTANCE = it }
             }
         }
     }

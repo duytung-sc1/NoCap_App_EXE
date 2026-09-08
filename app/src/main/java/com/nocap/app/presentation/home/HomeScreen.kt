@@ -52,7 +52,7 @@ fun HomeScreen(
             LargeTopAppBar(
                 title = {
                     Text(
-                        text = "Good reading \uD83D\uDCDA",
+                        text = "Chúc bạn đọc sách vui vẻ \uD83D\uDCDA",
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -94,7 +94,7 @@ private fun HomeContent(
     ) {
         // --- Continue Reading ---
         if (feed.continueReading.isNotEmpty()) {
-            item { SectionHeader(title = "Continue Reading") }
+            item { SectionHeader(title = "Đọc tiếp") }
             item {
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 16.dp),
@@ -118,7 +118,7 @@ private fun HomeContent(
 
         // --- Featured Books ---
         if (feed.featuredBooks.isNotEmpty()) {
-            item { SectionHeader(title = "Featured Books") }
+            item { SectionHeader(title = "Sách nổi bật") }
             item {
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 16.dp),
@@ -140,7 +140,7 @@ private fun HomeContent(
         if (feed.categories.isNotEmpty()) {
             item {
                 SectionHeader(
-                    title = "Browse Categories",
+                    title = "Khám phá thể loại",
                     onSeeAll = { onCategoryClick("all") }
                 )
             }
@@ -155,7 +155,7 @@ private fun HomeContent(
 
         // --- New Arrivals ---
         if (feed.newBooks.isNotEmpty()) {
-            item { SectionHeader(title = "New Arrivals") }
+            item { SectionHeader(title = "Sách mới") }
             item {
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 16.dp),
@@ -196,7 +196,7 @@ private fun SectionHeader(
         if (onSeeAll != null) {
             TextButton(onClick = onSeeAll) {
                 Text(
-                    text = "See all",
+                    text = "Xem tất cả",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -235,7 +235,7 @@ private fun CategoryChip(
         modifier = Modifier
     ) {
         Text(
-            text = category.name,
+            text = category.vietnameseName,
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onPrimaryContainer,

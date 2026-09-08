@@ -22,7 +22,7 @@ fun FavoritesScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Favorites", style = MaterialTheme.typography.titleLarge) }
+                title = { Text("Yêu thích", style = MaterialTheme.typography.titleLarge) }
             )
         }
     ) { paddingValues ->
@@ -34,12 +34,12 @@ fun FavoritesScreen(
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = "Favorite Books",
+                    text = "Sách yêu thích",
                     style = MaterialTheme.typography.headlineMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = "Books marked as favorite will appear here",
+                    text = "Sách được đánh dấu yêu thích sẽ xuất hiện ở đây",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 8.dp)

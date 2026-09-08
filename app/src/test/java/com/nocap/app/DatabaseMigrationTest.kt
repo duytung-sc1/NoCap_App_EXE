@@ -404,5 +404,180 @@ class DatabaseMigrationTest {
 
         conn.close()
     }
+
+    @Test
+    fun `test MIGRATION_4_5 executes correct create table and index statements`() {
+        val executedSqls = mutableListOf<String>()
+
+        val dbProxy = Proxy.newProxyInstance(
+            SupportSQLiteDatabase::class.java.classLoader,
+            arrayOf(SupportSQLiteDatabase::class.java)
+        ) { _, method, args ->
+            if (method.name == "execSQL") {
+                executedSqls.add(args[0] as String)
+            }
+            null
+        } as SupportSQLiteDatabase
+
+        assertEquals(4, AppDatabase.MIGRATION_4_5.startVersion)
+        assertEquals(5, AppDatabase.MIGRATION_4_5.endVersion)
+
+        AppDatabase.MIGRATION_4_5.migrate(dbProxy)
+
+        assertTrue(executedSqls.any { it.contains("CREATE TABLE IF NOT EXISTS review_items") })
+        assertTrue(executedSqls.any { it.contains("CREATE UNIQUE INDEX IF NOT EXISTS index_review_items_annotation_id") })
+        assertTrue(executedSqls.any { it.contains("CREATE INDEX IF NOT EXISTS index_review_items_book_id") })
+        assertTrue(executedSqls.any { it.contains("CREATE INDEX IF NOT EXISTS index_review_items_next_review_at") })
+        assertTrue(executedSqls.any { it.contains("CREATE INDEX IF NOT EXISTS index_review_items_is_enabled") })
+
+        assertTrue(executedSqls.any { it.contains("CREATE TABLE IF NOT EXISTS reading_sessions") })
+        assertTrue(executedSqls.any { it.contains("CREATE INDEX IF NOT EXISTS index_reading_sessions_book_id") })
+        assertTrue(executedSqls.any { it.contains("CREATE INDEX IF NOT EXISTS index_reading_sessions_started_at") })
+    }
+
+    @Test
+    fun `test real SQLite v4 to v5 migration preserves existing data and enables review and session tables`() {
+        val conn = java.sql.DriverManager.getConnection("jdbc:sqlite::memory:")
+
+        // 1. Create full v4 schema in SQLite
+        conn.createStatement().use { stmt ->
+            stmt.execute("""
+                CREATE TABLE catalog_books (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    author TEXT NOT NULL,
+                    description TEXT NOT NULL,
+                    cover_url TEXT NOT NULL,
+                    category_id TEXT NOT NULL,
+                    file_url TEXT NOT NULL,
+                    file_size_bytes INTEGER NOT NULL,
+                    content_version INTEGER NOT NULL,
+                    content_hash TEXT,
+                    is_featured INTEGER NOT NULL,
+                    is_new INTEGER NOT NULL,
+                    is_premium INTEGER NOT NULL,
+                    rating REAL NOT NULL,
+                    published_date TEXT,
+                    updated_at INTEGER NOT NULL,
+                    format TEXT NOT NULL DEFAULT 'EPUB',
+                    media_type TEXT NOT NULL DEFAULT 'application/epub+zip',
+                    source_type TEXT NOT NULL DEFAULT 'LOCAL_FILE',
+                    source_url TEXT DEFAULT NULL,
+                    is_in_inbox INTEGER NOT NULL DEFAULT 0,
+                    inbox_added_at INTEGER DEFAULT NULL,
+                    is_pinned INTEGER NOT NULL DEFAULT 0,
+                    is_archived INTEGER NOT NULL DEFAULT 0,
+                    reading_status TEXT NOT NULL DEFAULT 'UNREAD',
+                    user_title_override TEXT DEFAULT NULL,
+                    user_author_override TEXT DEFAULT NULL,
+                    custom_cover_path TEXT DEFAULT NULL,
+                    last_opened_at INTEGER DEFAULT NULL,
+                    added_at INTEGER NOT NULL DEFAULT 0,
+                    original_filename TEXT DEFAULT NULL
+                )
+            """.trimIndent())
+
+            stmt.execute("""
+                CREATE TABLE highlights (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    book_id TEXT NOT NULL,
+                    locator_json TEXT NOT NULL,
+                    text TEXT NOT NULL,
+                    color TEXT NOT NULL,
+                    note TEXT,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                )
+            """.trimIndent())
+
+            // 2. Insert sample data into v4 tables
+            val now = System.currentTimeMillis()
+            stmt.execute("""
+                INSERT INTO catalog_books (
+                    id, title, author, description, cover_url, category_id, file_url,
+                    file_size_bytes, content_version, content_hash, is_featured, is_new,
+                    is_premium, rating, published_date, updated_at, format, media_type,
+                    source_type, source_url, is_in_inbox, inbox_added_at, is_pinned,
+                    is_archived, reading_status, user_title_override, user_author_override,
+                    custom_cover_path, last_opened_at, added_at, original_filename
+                ) VALUES (
+                    'book_m12', 'Clean Architecture', 'Robert C. Martin', 'Design handbook',
+                    '', 'c1', '/files/clean_arch.pdf', 1048576, 1, 'hash123',
+                    1, 0, 0, 4.8, '2023', $now, 'PDF', 'application/pdf',
+                    'LOCAL_FILE', NULL, 0, NULL, 1, 0, 'READING', 'Clean Arch Override', NULL,
+                    NULL, $now, $now, 'clean_arch.pdf'
+                )
+            """.trimIndent())
+
+            stmt.execute("""
+                INSERT INTO highlights (id, book_id, locator_json, text, color, note, created_at, updated_at)
+                VALUES ('hl_1', 'book_m12', '{"href":"page_1"}', 'Dependencies must point inward', 'YELLOW', 'Key takeaway', $now, $now)
+            """.trimIndent())
+        }
+
+        // 3. Migrate v4 -> v5
+        val supportDb = Proxy.newProxyInstance(
+            SupportSQLiteDatabase::class.java.classLoader,
+            arrayOf(SupportSQLiteDatabase::class.java)
+        ) { _, method, args ->
+            if (method.name == "execSQL") {
+                conn.createStatement().use { s -> s.execute(args[0] as String) }
+            }
+            null
+        } as SupportSQLiteDatabase
+
+        AppDatabase.MIGRATION_4_5.migrate(supportDb)
+
+        // 4. Verify existing data preserved
+        conn.createStatement().use { stmt ->
+            val rsBook = stmt.executeQuery("SELECT title, user_title_override, is_pinned FROM catalog_books WHERE id = 'book_m12'")
+            assertTrue(rsBook.next())
+            assertEquals("Clean Architecture", rsBook.getString("title"))
+            assertEquals("Clean Arch Override", rsBook.getString("user_title_override"))
+            assertEquals(1, rsBook.getInt("is_pinned"))
+            rsBook.close()
+
+            val rsHl = stmt.executeQuery("SELECT text, note FROM highlights WHERE id = 'hl_1'")
+            assertTrue(rsHl.next())
+            assertEquals("Dependencies must point inward", rsHl.getString("text"))
+            assertEquals("Key takeaway", rsHl.getString("note"))
+            rsHl.close()
+
+            // 5. Test review_items table in v5
+            val now = System.currentTimeMillis()
+            stmt.execute("""
+                INSERT INTO review_items (
+                    id, annotation_id, book_id, is_enabled, next_review_at,
+                    last_reviewed_at, review_count, interval_days, ease_factor, created_at, updated_at
+                ) VALUES (
+                    'rev_1', 'hl_1', 'book_m12', 1, $now, NULL, 0, 1, 2.5, $now, $now
+                )
+            """.trimIndent())
+
+            val rsRev = stmt.executeQuery("SELECT annotation_id, interval_days, ease_factor FROM review_items WHERE id = 'rev_1'")
+            assertTrue(rsRev.next())
+            assertEquals("hl_1", rsRev.getString("annotation_id"))
+            assertEquals(1, rsRev.getInt("interval_days"))
+            assertEquals(2.5, rsRev.getDouble("ease_factor"), 0.001)
+            rsRev.close()
+
+            // 6. Test reading_sessions table in v5
+            stmt.execute("""
+                INSERT INTO reading_sessions (
+                    id, book_id, started_at, ended_at, duration_ms, start_progress, end_progress, format
+                ) VALUES (
+                    'sess_1', 'book_m12', $now, ${now + 60000}, 60000, 0.1, 0.25, 'PDF'
+                )
+            """.trimIndent())
+
+            val rsSess = stmt.executeQuery("SELECT duration_ms, format FROM reading_sessions WHERE id = 'sess_1'")
+            assertTrue(rsSess.next())
+            assertEquals(60000, rsSess.getLong("duration_ms"))
+            assertEquals("PDF", rsSess.getString("format"))
+            rsSess.close()
+        }
+
+        conn.close()
+    }
 }
 

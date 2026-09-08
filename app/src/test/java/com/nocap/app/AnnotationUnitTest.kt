@@ -41,6 +41,21 @@ class FakeHighlightDao : HighlightDao {
         val toRemove = map.values.filter { it.bookId == bookId }.map { it.id }
         toRemove.forEach { map.remove(it) }
     }
+
+    override fun observeAllHighlights(): Flow<List<HighlightEntity>> =
+        flowOf(map.values.toList())
+
+    override suspend fun getAllHighlights(): List<HighlightEntity> =
+        map.values.toList()
+
+    override fun observeAllNotes(): Flow<List<HighlightEntity>> =
+        flowOf(map.values.filter { !it.note.isNullOrBlank() })
+
+    override suspend fun getAllNotes(): List<HighlightEntity> =
+        map.values.filter { !it.note.isNullOrBlank() }
+
+    override suspend fun searchHighlights(query: String): List<HighlightEntity> =
+        map.values.filter { it.text.contains(query, ignoreCase = true) || (it.note?.contains(query, ignoreCase = true) == true) }
 }
 
 class AnnotationUnitTest {

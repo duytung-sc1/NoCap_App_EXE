@@ -218,7 +218,7 @@ fun RegisterDialog(
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
-                    label = { Text("Mật khẩu (tối thiểu 6 ký tự)") },
+                    label = { Text("Mật khẩu (tối thiểu 12 ký tự)") },
                     leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
                     trailingIcon = {
                         TextButton(onClick = { passwordVisible = !passwordVisible }) {

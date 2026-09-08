@@ -3,7 +3,6 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
-    id("com.google.gms.google-services")
 }
 
 android {
@@ -16,6 +15,8 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "1.0.0"
+        buildConfigField("String", "BACKEND_BASE_URL", "\"https://nocap-ebook-api.buiminhhien001.workers.dev\"")
+        resValue("string", "default_web_client_id", "847491126060-3dikoskpsf80ibrnf799tivmpe8vj2bn.apps.googleusercontent.com")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -43,6 +44,7 @@ android {
     }
 
     buildFeatures {
+        buildConfig = true
         compose = true
     }
 
@@ -99,6 +101,7 @@ dependencies {
 
     // OkHttp 4.12.0 for WorkManager book streaming downloads
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("org.jsoup:jsoup:1.18.3")
 
     // -------------------------------------------------------------------
     // Readium Kotlin Toolkit 3.3.0 (EPUB & PDF Reader Engine)
@@ -111,8 +114,6 @@ dependencies {
     // -------------------------------------------------------------------
     // Firebase BoM & Auth (M8B)
     // -------------------------------------------------------------------
-    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
-    implementation("com.google.firebase:firebase-auth")
 
     // -------------------------------------------------------------------
     // Android Credential Manager & Google ID for Google Sign-In

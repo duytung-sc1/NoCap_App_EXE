@@ -30,4 +30,19 @@ interface HighlightDao {
 
     @Query("DELETE FROM highlights WHERE book_id = :bookId")
     suspend fun deleteHighlightsByBookId(bookId: String)
+
+    @Query("SELECT * FROM highlights ORDER BY created_at DESC")
+    fun observeAllHighlights(): Flow<List<HighlightEntity>>
+
+    @Query("SELECT * FROM highlights ORDER BY created_at DESC")
+    suspend fun getAllHighlights(): List<HighlightEntity>
+
+    @Query("SELECT * FROM highlights WHERE note IS NOT NULL AND TRIM(note) != '' ORDER BY updated_at DESC")
+    fun observeAllNotes(): Flow<List<HighlightEntity>>
+
+    @Query("SELECT * FROM highlights WHERE note IS NOT NULL AND TRIM(note) != '' ORDER BY updated_at DESC")
+    suspend fun getAllNotes(): List<HighlightEntity>
+
+    @Query("SELECT * FROM highlights WHERE text LIKE '%' || :query || '%' OR note LIKE '%' || :query || '%' ORDER BY created_at DESC")
+    suspend fun searchHighlights(query: String): List<HighlightEntity>
 }

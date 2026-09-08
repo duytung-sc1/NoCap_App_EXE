@@ -43,13 +43,13 @@ class LocalCatalogRepositoryTest {
 
     @Test
     fun searchBooks_matchesTitleAndAuthor() = runTest {
-        val resultsByTitle = repository.searchBooks("Midnight").first()
+        val resultsByTitle = repository.searchBooks("truyen kieu").first()
         assertEquals(1, resultsByTitle.size)
-        assertEquals("The Midnight Library", resultsByTitle.first().title)
+        assertEquals("Truyện Kiều", resultsByTitle.first().title)
 
-        val resultsByAuthor = repository.searchBooks("Weir").first()
+        val resultsByAuthor = repository.searchBooks("nguyen dinh chieu").first()
         assertEquals(1, resultsByAuthor.size)
-        assertEquals("Andy Weir", resultsByAuthor.first().author)
+        assertEquals("Nguyễn Đình Chiểu", resultsByAuthor.first().author)
 
         val emptyQuery = repository.searchBooks("").first()
         assertEquals(SeedCatalogDataSource.books.size, emptyQuery.size)
@@ -57,8 +57,8 @@ class LocalCatalogRepositoryTest {
 
     @Test
     fun getBookById_returnsCorrectBook() = runTest {
-        val book = repository.getBookById("book-001")
+        val book = repository.getBookById("ws-vi-kieu")
         assertNotNull(book)
-        assertEquals("The Midnight Library", book?.title)
+        assertEquals("Truyện Kiều", book?.title)
     }
 }

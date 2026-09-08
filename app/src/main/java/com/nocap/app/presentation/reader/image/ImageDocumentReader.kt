@@ -20,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -43,6 +44,7 @@ import com.nocap.app.core.database.entity.ReadingProgressEntity
 import com.nocap.app.domain.model.CatalogBook
 import com.nocap.app.domain.model.DocumentReadingStatus
 import com.nocap.app.domain.model.ImageLocator
+import com.nocap.app.domain.session.ReadingSessionManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.File
@@ -57,14 +59,25 @@ fun ImageDocumentReader(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val db = remember { AppDatabase.getInstance(context) }
+    val sessionManager = remember { ReadingSessionManager.getInstance(context.applicationContext) }
+    var sessionId by remember { mutableStateOf<String?>(null) }
 
     var showControls by remember { mutableStateOf(true) }
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
 
+    DisposableEffect(Unit) {
+        onDispose {
+            sessionId?.let { sId ->
+                sessionManager.endSessionAsync(sId, 1f)
+            }
+        }
+    }
+
     // Update opened time and status
     LaunchedEffect(book.id) {
         scope.launch(Dispatchers.IO) {
+            sessionId = sessionManager.startSession(book.id, book.format.name, 1f)
             db.catalogDao().updateLastOpenedAt(book.id, System.currentTimeMillis())
             if (book.readingStatus == DocumentReadingStatus.UNREAD) {
                 db.catalogDao().updateReadingStatus(book.id, DocumentReadingStatus.READING)
@@ -80,6 +93,7 @@ fun ImageDocumentReader(
             )
         }
     }
+
 
     val transformState = rememberTransformableState { zoomChange, offsetChange, _ ->
         scale = (scale * zoomChange).coerceIn(1f, 5f)

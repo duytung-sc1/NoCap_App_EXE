@@ -26,8 +26,8 @@ class LocalCatalogRepository(
     private val catalogDao: com.nocap.app.core.database.dao.CatalogDao? = null
 ) : CatalogRepository {
 
-    private val _allBooks = MutableStateFlow(SeedCatalogDataSource.books)
-    private val _categories = MutableStateFlow(SeedCatalogDataSource.categories)
+    private val _allBooks = CloudCatalog.books
+    private val _categories = CloudCatalog.categories
     private val _continueReading = MutableStateFlow<List<ReadingProgress>>(emptyList())
 
     override fun observeHomeFeed(): Flow<HomeFeed> {
@@ -70,11 +70,18 @@ class LocalCatalogRepository(
             else {
                 val q = query.trim().lowercase()
                 books.filter {
-                    it.title.lowercase().contains(q) || it.author.lowercase().contains(q)
+                    com.nocap.app.core.util.VietnameseUtils.containsNormalized(it.title, q) ||
+                        com.nocap.app.core.util.VietnameseUtils.containsNormalized(it.author, q)
                 }
             }
         }
 
-    override suspend fun getBookById(bookId: String): CatalogBook? =
-        catalogDao?.getBookById(bookId)?.toDomain() ?: _allBooks.value.find { it.id == bookId }
+    override suspend fun getBookById(bookId: String): CatalogBook? {
+        val local = catalogDao?.getBookById(bookId)?.toDomain()
+        val remote = _allBooks.value.find { it.id == bookId }
+        return if (local != null && remote != null) local.copy(
+            fileUrl = remote.fileUrl, coverUrl = remote.coverUrl, fileSizeBytes = remote.fileSizeBytes,
+            contentHash = remote.contentHash, contentVersion = remote.contentVersion
+        ) else local ?: remote
+    }
 }

@@ -2,230 +2,25 @@ package com.nocap.app.data.catalog
 
 import com.nocap.app.domain.model.CatalogBook
 import com.nocap.app.domain.model.Category
-import com.nocap.app.domain.model.EntitlementType
 
-/**
- * Bundled development seed catalog.
- *
- * Design contract:
- * - This object is the ONLY place that knows about the "local" origin of data.
- * - CatalogRepository consumes this via a DataSource interface.
- * - A future RemoteCatalogDataSource can replace or supplement this without
- *   touching the repository or any upstream layer.
- *
- * Cover images use reliable public-domain placeholder URLs (via picsum.photos).
- * In production these will be CDN URLs from the backend.
- */
+// Generated from validated API sources by scripts/sync-public-books.py. Offline fallback.
 object SeedCatalogDataSource {
-
-    val categories: List<Category> = listOf(
-        Category(id = "fiction",       name = "Fiction",        displayOrder = 0),
-        Category(id = "non-fiction",   name = "Non-Fiction",    displayOrder = 1),
-        Category(id = "mystery",       name = "Mystery",        displayOrder = 2),
-        Category(id = "sci-fi",        name = "Sci-Fi",         displayOrder = 3),
-        Category(id = "romance",       name = "Romance",        displayOrder = 4),
-        Category(id = "history",       name = "History",        displayOrder = 5),
-        Category(id = "biography",     name = "Biography",      displayOrder = 6),
-        Category(id = "self-help",     name = "Self-Help",      displayOrder = 7),
+    val books = listOf(
+        CatalogBook(id = "ws-vi-kieu", title = "Truyện Kiều", author = "Nguyễn Du", description = "Tiếng Việt · EPUB đầy đủ · Đọc miễn phí.\nNguồn: Wikisource tiếng Việt\nhttps://vi.wikisource.org/wiki/Truy%E1%BB%87n%20Ki%E1%BB%81u\nBìa chữ do NoCap trình bày. Giữ thông tin nguồn và giấy phép trong sách.", coverUrl = "https://nocap-ebook-api.buiminhhien001.workers.dev/assets/covers/eddde6285458c24c2a4cff00d05d05b95511c8be22a73904f95327bbd6493eab.jpg", categoryId = "fiction", fileUrl = "https://nocap-ebook-api.buiminhhien001.workers.dev/assets/books/4fc8bc6cf2df378da046c666ce8154ce062c0b9e4231d2602648b916a8d5c9ec.epub", fileSizeBytes = 62922, contentHash = "4fc8bc6cf2df378da046c666ce8154ce062c0b9e4231d2602648b916a8d5c9ec", isFeatured = true, isNew = true, sourceUrl = "https://vi.wikisource.org/wiki/Truy%E1%BB%87n%20Ki%E1%BB%81u"),
+        CatalogBook(id = "ws-vi-luc-van-tien", title = "Lục Vân Tiên", author = "Nguyễn Đình Chiểu", description = "Tiếng Việt · EPUB đầy đủ · Đọc miễn phí.\nNguồn: Wikisource tiếng Việt\nhttps://vi.wikisource.org/wiki/L%E1%BB%A5c%20V%C3%A2n%20Ti%C3%AAn%20%28b%E1%BA%A3n%20Qu%E1%BB%91c%20ng%E1%BB%AF%202082%20c%C3%A2u%29\nBìa chữ do NoCap trình bày. Giữ thông tin nguồn và giấy phép trong sách.", coverUrl = "https://nocap-ebook-api.buiminhhien001.workers.dev/assets/covers/2380d160e5c6db79475b012c0f1af5e9f88877893c5ac23369350a50a02b37a1.jpg", categoryId = "fiction", fileUrl = "https://nocap-ebook-api.buiminhhien001.workers.dev/assets/books/d70a9c1443ee0bfb0cb1070d695a8260f7b5812185dfe0e67382bcd4c7d4fd07.epub", fileSizeBytes = 65278, contentHash = "d70a9c1443ee0bfb0cb1070d695a8260f7b5812185dfe0e67382bcd4c7d4fd07", isFeatured = true, isNew = true, sourceUrl = "https://vi.wikisource.org/wiki/L%E1%BB%A5c%20V%C3%A2n%20Ti%C3%AAn%20%28b%E1%BA%A3n%20Qu%E1%BB%91c%20ng%E1%BB%AF%202082%20c%C3%A2u%29"),
+        CatalogBook(id = "gutenberg-1342", title = "Pride and Prejudice", author = "Austen, Jane", description = "Tiếng Anh · EPUB đầy đủ · Đọc miễn phí.\nNguồn: Project Gutenberg / Gutendex\nhttps://www.gutenberg.org/ebooks/1342\nBìa chữ do NoCap trình bày. Giữ thông tin nguồn và giấy phép trong sách.", coverUrl = "https://nocap-ebook-api.buiminhhien001.workers.dev/assets/covers/20f69ce5c331427ef4daab9415231e31b1d9cfb2304f9a9e316a6728d62bee5d.jpg", categoryId = "romance", fileUrl = "https://nocap-ebook-api.buiminhhien001.workers.dev/assets/books/bbd82efa5e3e8d8a302a39c5e20d7d6d250804c7003c63378946d85f1176ccb6.epub", fileSizeBytes = 24835578, contentHash = "bbd82efa5e3e8d8a302a39c5e20d7d6d250804c7003c63378946d85f1176ccb6", isFeatured = true, isNew = true, sourceUrl = "https://www.gutenberg.org/ebooks/1342"),
+        CatalogBook(id = "gutenberg-2701", title = "Moby Dick; Or, The Whale", author = "Melville, Herman", description = "Tiếng Anh · EPUB đầy đủ · Đọc miễn phí.\nNguồn: Project Gutenberg / Gutendex\nhttps://www.gutenberg.org/ebooks/2701\nBìa chữ do NoCap trình bày. Giữ thông tin nguồn và giấy phép trong sách.", coverUrl = "https://nocap-ebook-api.buiminhhien001.workers.dev/assets/covers/f9c20027d23eeb233cf6c0365eddd6dc4bc80ff7331e4fc77633cb7d338dbbf3.jpg", categoryId = "fiction", fileUrl = "https://nocap-ebook-api.buiminhhien001.workers.dev/assets/books/21078430c9d034326635f4d57ce436c278956b148357903973aaee949a4598ec.epub", fileSizeBytes = 812415, contentHash = "21078430c9d034326635f4d57ce436c278956b148357903973aaee949a4598ec", isFeatured = true, isNew = true, sourceUrl = "https://www.gutenberg.org/ebooks/2701"),
+        CatalogBook(id = "gutenberg-1661", title = "The Adventures of Sherlock Holmes", author = "Doyle, Arthur Conan", description = "Tiếng Anh · EPUB đầy đủ · Đọc miễn phí.\nNguồn: Project Gutenberg / Gutendex\nhttps://www.gutenberg.org/ebooks/1661\nBìa chữ do NoCap trình bày. Giữ thông tin nguồn và giấy phép trong sách.", coverUrl = "https://nocap-ebook-api.buiminhhien001.workers.dev/assets/covers/2595daf73215b3225c5173f341d696fbd8c8baeb12cc51f10cc78bdb5599fb9b.jpg", categoryId = "mystery", fileUrl = "https://nocap-ebook-api.buiminhhien001.workers.dev/assets/books/a5ec3affcc10d1b610545f7dbd650258989db4b892f9205b8787b802376a73a5.epub", fileSizeBytes = 379177, contentHash = "a5ec3affcc10d1b610545f7dbd650258989db4b892f9205b8787b802376a73a5", isFeatured = true, isNew = true, sourceUrl = "https://www.gutenberg.org/ebooks/1661"),
+        CatalogBook(id = "gutenberg-11", title = "Alice's Adventures in Wonderland", author = "Carroll, Lewis", description = "Tiếng Anh · EPUB đầy đủ · Đọc miễn phí.\nNguồn: Project Gutenberg / Gutendex\nhttps://www.gutenberg.org/ebooks/11\nBìa chữ do NoCap trình bày. Giữ thông tin nguồn và giấy phép trong sách.", coverUrl = "https://nocap-ebook-api.buiminhhien001.workers.dev/assets/covers/5b60442ac47c9b95d6abda3ddf631e5b5c5bff5ea27f310294257713ef51ac35.jpg", categoryId = "fiction", fileUrl = "https://nocap-ebook-api.buiminhhien001.workers.dev/assets/books/12cbc3610260503383ad7ecf800beb0d885a6011e15900b2bf61cecfc571d6c8.epub", fileSizeBytes = 188960, contentHash = "12cbc3610260503383ad7ecf800beb0d885a6011e15900b2bf61cecfc571d6c8", isFeatured = true, isNew = true, sourceUrl = "https://www.gutenberg.org/ebooks/11"),
+        CatalogBook(id = "gutenberg-84", title = "Frankenstein; or, the modern prometheus", author = "Shelley, Mary Wollstonecraft", description = "Tiếng Anh · EPUB đầy đủ · Đọc miễn phí.\nNguồn: Project Gutenberg / Gutendex\nhttps://www.gutenberg.org/ebooks/84\nBìa chữ do NoCap trình bày. Giữ thông tin nguồn và giấy phép trong sách.", coverUrl = "https://nocap-ebook-api.buiminhhien001.workers.dev/assets/covers/8990ed8cec91ded006333f9f59af2f4496d25c70f9410aec85711bd9158a9ba0.jpg", categoryId = "sci-fi", fileUrl = "https://nocap-ebook-api.buiminhhien001.workers.dev/assets/books/2c29669a2cc1a726d6264178a2e8e86529208fd61ef92ca627b1612b2d98b2bd.epub", fileSizeBytes = 474161, contentHash = "2c29669a2cc1a726d6264178a2e8e86529208fd61ef92ca627b1612b2d98b2bd", isFeatured = false, isNew = true, sourceUrl = "https://www.gutenberg.org/ebooks/84"),
+        CatalogBook(id = "gutenberg-76", title = "Adventures of Huckleberry Finn", author = "Twain, Mark", description = "Tiếng Anh · EPUB đầy đủ · Đọc miễn phí.\nNguồn: Project Gutenberg / Gutendex\nhttps://www.gutenberg.org/ebooks/76\nBìa chữ do NoCap trình bày. Giữ thông tin nguồn và giấy phép trong sách.", coverUrl = "https://nocap-ebook-api.buiminhhien001.workers.dev/assets/covers/8c3fed6a85de5d61881213933189663ac7ecb49b9a7ae1a2da2414ba910b400e.jpg", categoryId = "fiction", fileUrl = "https://nocap-ebook-api.buiminhhien001.workers.dev/assets/books/578224b814a7a9940456d622655525ed74ebf50e91fffd98484f4970d9cadcb8.epub", fileSizeBytes = 16020333, contentHash = "578224b814a7a9940456d622655525ed74ebf50e91fffd98484f4970d9cadcb8", isFeatured = false, isNew = true, sourceUrl = "https://www.gutenberg.org/ebooks/76"),
+        CatalogBook(id = "gutenberg-98", title = "A Tale of Two Cities", author = "Dickens, Charles", description = "Tiếng Anh · EPUB đầy đủ · Đọc miễn phí.\nNguồn: Project Gutenberg / Gutendex\nhttps://www.gutenberg.org/ebooks/98\nBìa chữ do NoCap trình bày. Giữ thông tin nguồn và giấy phép trong sách.", coverUrl = "https://nocap-ebook-api.buiminhhien001.workers.dev/assets/covers/2b33e199af692f3f8d293ee3981b5a2cf062c38b96237daa46fc6b8ed0d130fe.jpg", categoryId = "fiction", fileUrl = "https://nocap-ebook-api.buiminhhien001.workers.dev/assets/books/15701b1310e0c8cfb39162f803b126feefd8309c74707a63e1a32dbfe733af3f.epub", fileSizeBytes = 7922028, contentHash = "15701b1310e0c8cfb39162f803b126feefd8309c74707a63e1a32dbfe733af3f", isFeatured = false, isNew = true, sourceUrl = "https://www.gutenberg.org/ebooks/98"),
+        CatalogBook(id = "gutenberg-120", title = "Treasure Island", author = "Stevenson, Robert Louis", description = "Tiếng Anh · EPUB đầy đủ · Đọc miễn phí.\nNguồn: Project Gutenberg / Gutendex\nhttps://www.gutenberg.org/ebooks/120\nBìa chữ do NoCap trình bày. Giữ thông tin nguồn và giấy phép trong sách.", coverUrl = "https://nocap-ebook-api.buiminhhien001.workers.dev/assets/covers/e5a801882436da6eb8341e6f957039b9d8d762fa6377a157718943de9c0fdee3.jpg", categoryId = "fiction", fileUrl = "https://nocap-ebook-api.buiminhhien001.workers.dev/assets/books/5f6027f3ca2597990d117c28e0acaf855daae8a3059b3088f727cbfc8a00fe67.epub", fileSizeBytes = 273475, contentHash = "5f6027f3ca2597990d117c28e0acaf855daae8a3059b3088f727cbfc8a00fe67", isFeatured = false, isNew = true, sourceUrl = "https://www.gutenberg.org/ebooks/120")
     )
-
-    val books: List<CatalogBook> = listOf(
-        // --- Featured ---
-        CatalogBook(
-            id = "book-001",
-            title = "The Midnight Library",
-            author = "Matt Haig",
-            description = "Between life and death there is a library. When Nora Seed finds herself in the Midnight Library, she has a chance to make things right.",
-            coverUrl = "https://picsum.photos/seed/book001/300/450",
-            categoryId = "fiction",
-            fileUrl = "https://www.gutenberg.org/ebooks/11.epub.images",
-            fileSizeBytes = 360000L,
-            isFeatured = true,
-            isNew = false,
-            isPremium = false,
-            entitlementType = EntitlementType.FREE,
-            rating = 4.5f,
-            publishedDate = "2020-09-29"
-        ),
-        CatalogBook(
-            id = "book-002",
-            title = "Project Hail Mary",
-            author = "Andy Weir",
-            description = "A lone astronaut must save Earth from disaster in this propulsive new novel from the author of The Martian.",
-            coverUrl = "https://picsum.photos/seed/book002/300/450",
-            categoryId = "sci-fi",
-            fileUrl = "",
-            fileSizeBytes = 0L,
-            isFeatured = true,
-            isNew = false,
-            isPremium = true,
-            playProductId = "premium_book_002",
-            entitlementType = EntitlementType.ONE_TIME_PURCHASE,
-            rating = 4.8f,
-            publishedDate = "2021-05-04"
-        ),
-        CatalogBook(
-            id = "book-003",
-            title = "Atomic Habits",
-            author = "James Clear",
-            description = "A revolutionary system to get 1% better every day. Build good habits, break bad ones.",
-            coverUrl = "https://picsum.photos/seed/book003/300/450",
-            categoryId = "self-help",
-            fileUrl = "",
-            fileSizeBytes = 0L,
-            isFeatured = true,
-            isNew = false,
-            isPremium = false,
-            entitlementType = EntitlementType.FREE,
-            rating = 4.7f,
-            publishedDate = "2018-10-16"
-        ),
-        CatalogBook(
-            id = "book-004",
-            title = "The Thursday Murder Club",
-            author = "Richard Osman",
-            description = "Four unlikely friends meet weekly to investigate unsolved murders. But then a real body turns up.",
-            coverUrl = "https://picsum.photos/seed/book004/300/450",
-            categoryId = "mystery",
-            fileUrl = "",
-            fileSizeBytes = 0L,
-            isFeatured = true,
-            isNew = false,
-            isPremium = false,
-            entitlementType = EntitlementType.FREE,
-            rating = 4.3f,
-            publishedDate = "2020-09-03"
-        ),
-        // --- New Arrivals ---
-        CatalogBook(
-            id = "book-005",
-            title = "Tomorrow, and Tomorrow, and Tomorrow",
-            author = "Gabrielle Zevin",
-            description = "Two friends build a game empire and something far more fragile than a business.",
-            coverUrl = "https://picsum.photos/seed/book005/300/450",
-            categoryId = "fiction",
-            fileUrl = "",
-            fileSizeBytes = 0L,
-            isFeatured = false,
-            isNew = true,
-            isPremium = false,
-            entitlementType = EntitlementType.FREE,
-            rating = 4.6f,
-            publishedDate = "2022-07-05"
-        ),
-        CatalogBook(
-            id = "book-006",
-            title = "Fourth Wing",
-            author = "Rebecca Yarros",
-            description = "Enter the brutal and elite world of a war college where dragons choose their riders.",
-            coverUrl = "https://picsum.photos/seed/book006/300/450",
-            categoryId = "fiction",
-            fileUrl = "",
-            fileSizeBytes = 0L,
-            isFeatured = false,
-            isNew = true,
-            isPremium = true,
-            playProductId = "premium_book_006",
-            entitlementType = EntitlementType.ONE_TIME_PURCHASE,
-            rating = 4.5f,
-            publishedDate = "2023-05-02"
-        ),
-        CatalogBook(
-            id = "book-007",
-            title = "Intermezzo",
-            author = "Sally Rooney",
-            description = "Two brothers, a grief neither can speak of, and the women who enter their lives.",
-            coverUrl = "https://picsum.photos/seed/book007/300/450",
-            categoryId = "fiction",
-            fileUrl = "",
-            fileSizeBytes = 0L,
-            isFeatured = false,
-            isNew = true,
-            isPremium = false,
-            entitlementType = EntitlementType.FREE,
-            rating = 4.1f,
-            publishedDate = "2024-10-01"
-        ),
-        CatalogBook(
-            id = "book-008",
-            title = "The Women",
-            author = "Kristin Hannah",
-            description = "A young woman follows her brother to serve as an Army nurse in Vietnam.",
-            coverUrl = "https://picsum.photos/seed/book008/300/450",
-            categoryId = "history",
-            fileUrl = "",
-            fileSizeBytes = 0L,
-            isFeatured = false,
-            isNew = true,
-            isPremium = false,
-            entitlementType = EntitlementType.FREE,
-            rating = 4.7f,
-            publishedDate = "2024-02-06"
-        ),
-        // --- General catalog ---
-        CatalogBook(
-            id = "book-009",
-            title = "Thinking, Fast and Slow",
-            author = "Daniel Kahneman",
-            description = "The two systems that drive the way we think — and how we can harness them.",
-            coverUrl = "https://picsum.photos/seed/book009/300/450",
-            categoryId = "non-fiction",
-            fileUrl = "",
-            fileSizeBytes = 0L,
-            isFeatured = false,
-            isNew = false,
-            isPremium = false,
-            entitlementType = EntitlementType.FREE,
-            rating = 4.6f,
-            publishedDate = "2011-10-25"
-        ),
-        CatalogBook(
-            id = "book-010",
-            title = "Dune",
-            author = "Frank Herbert",
-            description = "Set in the far future amidst a feudal interstellar society, Dune is one of the greatest science fiction works ever written.",
-            coverUrl = "https://picsum.photos/seed/book010/300/450",
-            categoryId = "sci-fi",
-            fileUrl = "",
-            fileSizeBytes = 0L,
-            isFeatured = false,
-            isNew = false,
-            isPremium = false,
-            entitlementType = EntitlementType.FREE,
-            rating = 4.8f,
-            publishedDate = "1965-08-01"
-        ),
-        CatalogBook(
-            id = "book-011",
-            title = "The Seven Husbands of Evelyn Hugo",
-            author = "Taylor Jenkins Reid",
-            description = "A reclusive Hollywood star finally tells the truth about her glamorous and scandalous life.",
-            coverUrl = "https://picsum.photos/seed/book011/300/450",
-            categoryId = "romance",
-            fileUrl = "",
-            fileSizeBytes = 0L,
-            isFeatured = false,
-            isNew = false,
-            isPremium = false,
-            entitlementType = EntitlementType.FREE,
-            rating = 4.7f,
-            publishedDate = "2017-06-13"
-        ),
-        CatalogBook(
-            id = "book-012",
-            title = "Sapiens",
-            author = "Yuval Noah Harari",
-            description = "A brief history of humankind — from the Stone Age to the present.",
-            coverUrl = "https://picsum.photos/seed/book012/300/450",
-            categoryId = "history",
-            fileUrl = "",
-            fileSizeBytes = 0L,
-            isFeatured = false,
-            isNew = false,
-            isPremium = false,
-            entitlementType = EntitlementType.FREE,
-            rating = 4.5f,
-            publishedDate = "2011-01-01"
-        ),
+    val categories = listOf(
+        Category(id = "fiction", name = "Hư cấu", displayOrder = 0),
+        Category(id = "mystery", name = "Trinh thám", displayOrder = 1),
+        Category(id = "sci-fi", name = "Khoa học viễn tưởng", displayOrder = 2),
+        Category(id = "romance", name = "Lãng mạn", displayOrder = 3)
     )
 }

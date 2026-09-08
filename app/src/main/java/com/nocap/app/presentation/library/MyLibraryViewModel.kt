@@ -52,7 +52,7 @@ import java.io.FileOutputStream
 
 enum class LibraryTab(val displayName: String) {
     ALL("Tất cả"),
-    INBOX("Inbox"),
+    INBOX("Chưa phân loại"),
     COLLECTIONS("Bộ sưu tập"),
     TAGS("Thẻ")
 }
@@ -388,7 +388,7 @@ class MyLibraryViewModel(
     fun onSetInboxState(bookId: String, inInbox: Boolean) {
         viewModelScope.launch {
             libraryRepository.setInboxState(bookId, inInbox)
-            val msg = if (inInbox) "Đã chuyển vào Inbox" else "Đã hoàn thành tổ chức"
+            val msg = if (inInbox) "Đã chuyển vào Chưa phân loại" else "Đã hoàn thành tổ chức"
             _events.emit(LibraryEvent.ShowMessage(msg))
         }
     }

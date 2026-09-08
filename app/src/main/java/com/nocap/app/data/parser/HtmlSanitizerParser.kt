@@ -14,16 +14,20 @@ object HtmlSanitizerParser {
         "script", "iframe", "object", "embed", "applet", "form", "base", "input", "button"
     )
 
-    fun validateAndParse(file: File, suggestedTitle: String? = null): TextDocument {
+    fun validateAndParse(file: File, suggestedTitle: String? = null, mainContentOnly: Boolean = false): TextDocument {
         if (!file.exists()) {
             throw IllegalArgumentException("Tệp HTML không tồn tại: ${file.name}")
+        }
+        if (mainContentOnly && file.length() > 8L * 1024 * 1024) {
+            throw IllegalArgumentException("Trang HTML quá lớn để trích xuất nội dung.")
         }
 
         val rawHtml = FileInputStream(file).use { fis ->
             fis.bufferedReader(StandardCharsets.UTF_8).readText()
         }
 
-        return parseString(rawHtml, suggestedTitle ?: file.nameWithoutExtension)
+        val readableHtml = if (mainContentOnly) WebArticleExtractor.extract(rawHtml, suggestedTitle ?: file.nameWithoutExtension) else rawHtml
+        return parseString(readableHtml, suggestedTitle ?: file.nameWithoutExtension)
     }
 
     fun parseString(rawHtml: String, fallbackTitle: String = "Tài liệu HTML"): TextDocument {
@@ -195,6 +199,7 @@ object HtmlSanitizerParser {
             val attributes = m.groupValues[3]
 
             when (tagName) {
+                "br" -> spans.add(TextSpan("\n"))
                 "b", "strong" -> isBold = !isClosing
                 "i", "em" -> isItalic = !isClosing
                 "u" -> isUnderline = !isClosing

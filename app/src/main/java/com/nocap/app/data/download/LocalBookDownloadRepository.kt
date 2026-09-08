@@ -52,9 +52,8 @@ class LocalBookDownloadRepository(
         }
 
         // Fetch catalog book info
-        var book = catalogDao.getBookById(bookId)?.toDomain()
-        if (book == null) {
-            book = catalogRepository.getBookById(bookId)
+        val book = catalogRepository.getBookById(bookId)
+        if (catalogDao.getBookById(bookId) == null) {
             if (book != null) {
                 // Ensure category and book exist in database for foreign key constraint
                 val categories = catalogRepository.observeCategories().first()

@@ -292,7 +292,7 @@ fun LibraryScreen(
                     onClick = { viewModel.onTabChange(LibraryTab.INBOX) },
                     text = {
                         Text(
-                            if (uiState.inboxCount > 0) "Inbox (${uiState.inboxCount})" else "Inbox",
+                            if (uiState.inboxCount > 0) "Chưa phân loại (${uiState.inboxCount})" else "Chưa phân loại",
                             fontWeight = FontWeight.SemiBold
                         )
                     }
@@ -1529,7 +1529,7 @@ fun LibraryScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "Nhập liên kết tải tài liệu trực tiếp (.epub hoặc .pdf). Chỉ hỗ trợ giao thức bảo mật HTTPS.",
+                        text = "Nhập liên kết HTTPS tới tệp tài liệu hoặc trang bài viết. Với trang web, app chỉ giữ nội dung chính và loại bỏ liên kết, menu, quảng cáo.",
                         style = MaterialTheme.typography.bodyMedium
                     )
                     TextField(
@@ -2040,7 +2040,7 @@ private fun DocumentCardItem(
                                 )
 
                                 DropdownMenuItem(
-                                    text = { Text(if (book.isInInbox) "Đánh dấu đã tổ chức" else "Chuyển vào Inbox") },
+                                    text = { Text(if (book.isInInbox) "Đánh dấu đã tổ chức" else "Chuyển vào Chưa phân loại") },
                                     leadingIcon = { Icon(Icons.Default.CheckCircle, contentDescription = null) },
                                     onClick = {
                                         showMenu = false

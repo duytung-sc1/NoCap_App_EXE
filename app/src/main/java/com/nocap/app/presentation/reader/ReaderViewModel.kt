@@ -38,7 +38,11 @@ import com.nocap.app.domain.repository.CatalogRepository
 import com.nocap.app.domain.repository.CustomFontRepository
 import com.nocap.app.domain.repository.LibraryRepository
 import com.nocap.app.domain.repository.PerBookPreferencesRepository
+import com.nocap.app.data.review.LocalReviewRepository
+import com.nocap.app.domain.repository.ReviewRepository
+import com.nocap.app.domain.session.ReadingSessionManager
 import kotlinx.coroutines.Job
+
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -128,8 +132,14 @@ class ReaderViewModel(
     private val publicationManager: ReadiumPublicationManager,
     private val annotationRepository: AnnotationRepository,
     private val perBookPreferencesRepository: PerBookPreferencesRepository,
-    private val customFontRepository: CustomFontRepository
+    private val customFontRepository: CustomFontRepository,
+    private val reviewRepository: ReviewRepository? = null,
+    private val readingSessionManager: ReadingSessionManager? = null,
+    private val initialLocatorJson: String? = null
 ) : ViewModel() {
+
+    private var activeSessionId: String? = null
+
 
     private val _uiState = MutableStateFlow<ReaderUiState>(ReaderUiState.Loading)
     val uiState: StateFlow<ReaderUiState> = _uiState.asStateFlow()
@@ -245,7 +255,7 @@ class ReaderViewModel(
             }
 
             val catalogBook = catalogRepository.getBookById(bookId)
-            val title = catalogBook?.title ?: file.nameWithoutExtension.ifBlank { "Ebook" }
+            val title = catalogBook?.title ?: file.nameWithoutExtension.ifBlank { "Sách điện tử" }
             val format = catalogBook?.format ?: FormatSniffer.sniff(file) ?: PublicationFormat.EPUB
 
             if (format != PublicationFormat.EPUB && format != PublicationFormat.PDF) {
@@ -260,16 +270,28 @@ class ReaderViewModel(
             }
 
             val savedProgress = libraryRepository.observeBookProgress(bookId).first()
-            val initialLocator = publicationManager.deserializeLocator(savedProgress?.locatorJson)
+            val locatorJsonToUse = initialLocatorJson ?: savedProgress?.locatorJson
 
             val openResult = publicationManager.openPublication(file)
             openResult.onSuccess { publication ->
                 currentPublication?.let { publicationManager.closePublication(it) }
                 currentPublication = publication
+                val initialLocator = publicationManager.deserializeLocator(locatorJsonToUse, publication)
                 val toc = publicationManager.extractTableOfContents(publication)
                 val format = catalogBook?.format ?: FormatSniffer.sniff(file) ?: PublicationFormat.EPUB
                 _isSearchSupported.value = publication.isSearchable
                 libraryRepository.updateLastOpenedAt(bookId, System.currentTimeMillis())
+
+                // Start reading session
+                val startProgress = (initialLocator?.locations?.progression ?: savedProgress?.progression?.toDouble() ?: 0.0).toFloat()
+                viewModelScope.launch {
+                    activeSessionId = readingSessionManager?.startSession(
+                        bookId = bookId,
+                        format = format.name,
+                        startProgress = startProgress
+                    )
+                }
+
                 _uiState.value = ReaderUiState.Ready(
                     publication = publication,
                     initialLocator = initialLocator,
@@ -278,7 +300,8 @@ class ReaderViewModel(
                     format = format
                 )
             }.onFailure { error ->
-                _uiState.value = ReaderUiState.Error(error.message ?: "Failed to open book")
+
+                _uiState.value = ReaderUiState.Error(error.message ?: "Không thể mở sách")
             }
         }
     }
@@ -314,11 +337,20 @@ class ReaderViewModel(
         }
     }
 
+    fun endActiveSession(progression: Float? = null) {
+        val sId = activeSessionId ?: return
+        activeSessionId = null
+        val finalProg = progression ?: (_currentLocator.value?.locations?.progression ?: 0.0).toFloat()
+        readingSessionManager?.endSessionAsync(sId, finalProg)
+    }
+
     fun saveCurrentLocationImmediately(locator: Locator?) {
-        val target = locator ?: _currentLocator.value ?: return
+        val target = locator ?: _currentLocator.value
+        val progression = (target?.locations?.progression ?: 0.0).toFloat().coerceIn(0f, 1f)
+        endActiveSession(progression)
+        if (target == null) return
         viewModelScope.launch {
             val now = System.currentTimeMillis()
-            val progression = (target.locations.progression ?: 0.0).toFloat().coerceIn(0f, 1f)
             val chapterTitle = target.title
             val locatorJson = publicationManager.serializeLocator(target)
 
@@ -344,7 +376,7 @@ class ReaderViewModel(
                     id = UUID.randomUUID().toString(),
                     bookId = bookId,
                     locatorJson = publicationManager.serializeLocator(locator),
-                    chapterTitle = locator.title ?: "Bookmark",
+                    chapterTitle = locator.title ?: "Dấu trang",
                     snippet = locator.text.highlight ?: locator.text.after ?: locator.title,
                     createdAt = System.currentTimeMillis()
                 )
@@ -433,6 +465,7 @@ class ReaderViewModel(
         locator: Locator,
         colorHex: String = "YELLOW",
         note: String? = null,
+        addToReview: Boolean = false,
         onComplete: (HighlightEntity) -> Unit = {}
     ) {
         viewModelScope.launch {
@@ -445,9 +478,59 @@ class ReaderViewModel(
                 color = colorHex,
                 note = note?.trim()?.ifBlank { null }
             )
-            result.onSuccess { onComplete(it) }
+            result.onSuccess { hl ->
+                if (addToReview || !note.isNullOrBlank()) {
+                    reviewRepository?.addToReview(hl.id, bookId)
+                }
+                onComplete(hl)
+            }
         }
     }
+
+    fun addHighlight(
+        text: String,
+        colorHex: String = "YELLOW",
+        locatorJson: String,
+        note: String? = null,
+        addToReview: Boolean = false,
+        onComplete: (HighlightEntity) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            val result = annotationRepository.addHighlight(
+                bookId = bookId,
+                locatorJson = locatorJson,
+                text = text.trim(),
+                color = colorHex,
+                note = note?.trim()?.ifBlank { null }
+            )
+            result.onSuccess { hl ->
+                if (addToReview || !note.isNullOrBlank()) {
+                    reviewRepository?.addToReview(hl.id, bookId)
+                }
+                onComplete(hl)
+            }
+        }
+    }
+
+    fun toggleReview(annotationId: String) {
+        viewModelScope.launch {
+            val existing = reviewRepository?.getReviewItem(annotationId)
+            if (existing != null) {
+                reviewRepository.removeFromReview(annotationId)
+            } else {
+                reviewRepository?.addToReview(annotationId, bookId)
+            }
+        }
+    }
+
+    suspend fun extractPdfPageText(pageIndex: Int): com.nocap.app.data.parser.PdfTextExtractor.PageTextResult? {
+        val downloaded = downloadRepository.observeDownload(bookId).first() ?: return null
+        val file = File(downloaded.localFilePath)
+        if (!file.exists()) return null
+        return com.nocap.app.data.parser.PdfTextExtractor.extractPageText(file, pageIndex)
+    }
+
+
 
     fun updateHighlightColor(id: String, colorHex: String) {
         viewModelScope.launch {
@@ -621,12 +704,14 @@ class ReaderViewModel(
         searchJob?.cancel()
         currentPublication?.let { publicationManager.closePublication(it) }
         currentPublication = null
+        endActiveSession()
     }
 
     companion object {
         fun provideFactory(
             bookId: String,
-            context: Context
+            context: Context,
+            initialLocatorJson: String? = null
         ): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -640,6 +725,8 @@ class ReaderViewModel(
                 val annotationRepo = LocalAnnotationRepository(db.highlightDao())
                 val perBookRepo = LocalPerBookPreferencesRepository(db.perBookPreferencesDao())
                 val customFontRepo = LocalCustomFontRepository(context.applicationContext, db.customFontDao())
+                val reviewRepo = LocalReviewRepository(db.reviewDao())
+                val sessionManager = ReadingSessionManager.getInstance(context.applicationContext)
 
                 return ReaderViewModel(
                     bookId = bookId,
@@ -651,9 +738,13 @@ class ReaderViewModel(
                     publicationManager = publicationManager,
                     annotationRepository = annotationRepo,
                     perBookPreferencesRepository = perBookRepo,
-                    customFontRepository = customFontRepo
+                    customFontRepository = customFontRepo,
+                    reviewRepository = reviewRepo,
+                    readingSessionManager = sessionManager,
+                    initialLocatorJson = initialLocatorJson
                 ) as T
             }
         }
     }
 }
+
