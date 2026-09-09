@@ -126,38 +126,16 @@ fun ReadingMemoryScreen(
                     .padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // 1. Reading Stats Summary Card
+                // Start with the user's saved knowledge; statistics remain in the toolbar.
                 item {
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onNavigateToStats() },
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f))
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "Thói quen đọc",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(16.dp))
-                            }
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                StatColumn(title = "Hôm nay", value = formatDurationMinutes(uiState.statsSummary.timeTodayMs))
-                                StatColumn(title = "7 ngày qua", value = formatDurationMinutes(uiState.statsSummary.timeLast7DaysMs))
-                                StatColumn(title = "30 ngày qua", value = formatDurationHours(uiState.statsSummary.timeLast30DaysMs))
-                                StatColumn(title = "Tài liệu", value = "${uiState.statsSummary.distinctBooksCount}")
-                            }
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Trở lại những điều bạn muốn nhớ", style = MaterialTheme.typography.titleMedium)
+                        Text("Tìm đoạn tô sáng, ghi chú hoặc ôn lại những ý đã lưu khi đọc.",
+                            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        OutlinedButton(onClick = onNavigateToSearch, modifier = Modifier.fillMaxWidth()) {
+                            Icon(Icons.Default.Search, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Tìm trong tài liệu và ghi chú")
                         }
                     }
                 }

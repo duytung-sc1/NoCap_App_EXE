@@ -92,6 +92,18 @@ private fun HomeContent(
         ),
         verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
+        if (feed.featuredBooks.isEmpty() && feed.newBooks.isEmpty()) {
+            item {
+                Text("Chưa có sách để giới thiệu", style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
+                Text("Kiểm tra kết nối để xem danh mục. Bạn vẫn có thể vào Tài liệu để thêm tệp hoặc đọc thư viện trên máy.",
+                    style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp))
+                TextButton(onClick = { onCategoryClick("all") }, modifier = Modifier.padding(horizontal = 8.dp)) {
+                    Text("Mở danh mục sách")
+                }
+            }
+        }
         // --- Continue Reading ---
         if (feed.continueReading.isNotEmpty()) {
             item { SectionHeader(title = "Đọc tiếp") }

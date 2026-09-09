@@ -273,13 +273,11 @@ fun TextDocumentReader(
                 CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
         } else if (errorMessage != null) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    text = errorMessage ?: "Lỗi tải tài liệu",
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(24.dp)
-                )
-            }
+            com.nocap.app.presentation.components.WorkspaceState(
+                title = "Chưa mở được tài liệu",
+                message = "Hãy quay lại thư viện và mở lại. Nếu vẫn gặp lỗi, thử nhập lại tệp gốc. Tài liệu và ghi chú của bạn vẫn được giữ.",
+                actionLabel = "Về thư viện", onAction = onBackClick
+            )
         } else {
             val doc = document!!
 
@@ -330,6 +328,7 @@ fun TextDocumentReader(
                             )
                             .combinedClickable(
                                 onClick = { showControls = !showControls },
+                                onLongClickLabel = "Tô sáng hoặc thêm ghi chú",
                                 onLongClick = {
                                     if (block.plainText.isNotBlank()) {
                                         selectedBlockForNote = Pair(idx, block)

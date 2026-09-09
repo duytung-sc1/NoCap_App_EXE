@@ -68,8 +68,8 @@ class SyncWorker(context: Context,params: WorkerParameters): CoroutineWorker(con
                 val unresolved=db.query("SELECT (SELECT COUNT(*) FROM sync_conflicts)+(SELECT COUNT(*) FROM sync_inbox)").use { it.moveToFirst();it.getLong(0) }
                 val pending=db.query("SELECT COUNT(*) FROM sync_outbox").use { it.moveToFirst();it.getLong(0) }
                 SyncScheduler.report(profile,when {
-                    unresolved>0 -> "Đã đồng bộ; $unresolved bản ghi được giữ lại để xử lý xung đột"
-                    pending>0 -> "Còn $pending bản ghi chờ đồng bộ hoặc kết thúc phiên đọc"
+                    unresolved>0 -> "Một số thay đổi chưa hợp nhất được. Các phiên bản vẫn được giữ; hãy thử đồng bộ lại sau."
+                    pending>0 -> "Còn thay đổi đang chờ. Hãy kết thúc phiên đọc và đồng bộ lại."
                     else -> "Đã đồng bộ"
                 })
                 Result.success()
@@ -79,7 +79,7 @@ class SyncWorker(context: Context,params: WorkerParameters): CoroutineWorker(con
                 Result.success() // Keep outbox intact; login/foreground/periodic sync rechecks entitlement.
             }
             catch(e: Exception) {
-                SyncScheduler.report(profile,"Chưa đồng bộ: ${e.message ?: "lỗi kết nối"}. Dữ liệu vẫn được giữ trên máy.")
+                SyncScheduler.report(profile,"Chưa đồng bộ được. Kiểm tra kết nối rồi thử lại. Dữ liệu trên máy vẫn được giữ.")
                 Result.retry()
             }
         }

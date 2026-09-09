@@ -1,5 +1,7 @@
 package com.nocap.app.presentation.settings
 
+import androidx.compose.foundation.layout.widthIn
+
 import android.content.pm.PackageInfo
 import android.os.Build
 import androidx.compose.foundation.background
@@ -155,7 +157,7 @@ fun SettingsScreen(
                         val syncContext = androidx.compose.ui.platform.LocalContext.current
                         Text(syncStatus)
                         Button(onClick = { com.nocap.app.data.sync.SyncScheduler.now(syncContext) }) { Text("Đồng bộ ngay") }
-                        Text("Thư viện đám mây — bản sao lưu ZIP", fontWeight = FontWeight.Bold)
+                        Text("Bản sao lưu thư viện", fontWeight = FontWeight.Bold)
                         Text("Sao lưu và khôi phục sách, ghi chú, tiến độ, thẻ và bộ sưu tập.")
                         if (cloudBusy) CircularProgressIndicator(Modifier.padding(8.dp))
                         cloudMessage?.let { Text(it, modifier = Modifier.padding(vertical = 8.dp)) }
@@ -445,10 +447,11 @@ fun SettingsScreen(
                             HorizontalDivider()
                             Spacer(modifier = Modifier.height(12.dp))
 
-                            Row(
+                            Text("Đăng xuất chuyển sang thư viện Khách riêng biệt. Dữ liệu tài khoản vẫn được giữ để dùng tiếp khi đăng nhập lại.",
+                                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Column(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 OutlinedButton(
                                     onClick = { viewModel.openEditProfile() },
@@ -573,7 +576,7 @@ fun SettingsScreen(
                             OutlinedButton(
                                 onClick = { viewModel.updateFontSize((preferences.fontSizeMultiplier - 0.1f).coerceIn(0.8f, 2.0f)) },
                                 shape = CircleShape,
-                                modifier = Modifier.size(36.dp),
+                                modifier = Modifier.size(48.dp),
                                 contentPadding = PaddingValues(0.dp)
                             ) {
                                 Text("A-", fontWeight = FontWeight.Bold)
@@ -583,14 +586,14 @@ fun SettingsScreen(
                                 text = "${(preferences.fontSizeMultiplier * 100).toInt()}%",
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Bold,
-                                modifier = Modifier.width(50.dp),
+                                modifier = Modifier.widthIn(min = 50.dp),
                                 textAlign = TextAlign.Center
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             OutlinedButton(
                                 onClick = { viewModel.updateFontSize((preferences.fontSizeMultiplier + 0.1f).coerceIn(0.8f, 2.0f)) },
                                 shape = CircleShape,
-                                modifier = Modifier.size(36.dp),
+                                modifier = Modifier.size(48.dp),
                                 contentPadding = PaddingValues(0.dp)
                             ) {
                                 Text("A+", fontWeight = FontWeight.Bold)

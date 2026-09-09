@@ -1,6 +1,8 @@
 package com.nocap.app.presentation.library
 
 import android.content.Context
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -278,7 +280,8 @@ fun LibraryScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            TabRow(
+            ScrollableTabRow(
+                edgePadding = 16.dp,
                 selectedTabIndex = uiState.selectedTab.ordinal,
                 containerColor = MaterialTheme.colorScheme.background
             ) {
@@ -1914,7 +1917,7 @@ private fun DocumentCardItem(
                         onClick = onReadClick,
                         shape = RoundedCornerShape(8.dp),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                        modifier = Modifier.height(32.dp)
+                        modifier = Modifier.heightIn(min = 48.dp)
                     ) {
                         val isReading = progress != null && progress.progression > 0f
                         Text(
@@ -1930,7 +1933,7 @@ private fun DocumentCardItem(
                                 onClick = { onSetInbox(false) },
                                 shape = RoundedCornerShape(8.dp),
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                modifier = Modifier.height(30.dp).padding(end = 4.dp)
+                                modifier = Modifier.heightIn(min = 48.dp).padding(end = 4.dp)
                             ) {
                                 Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
@@ -1941,7 +1944,7 @@ private fun DocumentCardItem(
                         Box {
                             IconButton(
                                 onClick = { showMenu = true },
-                                modifier = Modifier.size(32.dp)
+                                modifier = Modifier.size(48.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.MoreVert,
@@ -2399,6 +2402,7 @@ private fun EmptyDocumentsView(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(32.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -2421,33 +2425,33 @@ private fun EmptyDocumentsView(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Không có kết quả nào phù hợp với: \"$searchQuery\"",
+                    text = "Không có kết quả phù hợp với \"$searchQuery\". Thử từ khóa ngắn hơn hoặc đổi bộ lọc phía trên.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
                 )
             } else if (tab == LibraryTab.INBOX) {
                 Text(
-                    text = "Hộp thư đến trống",
+                    text = "Không có tài liệu chưa phân loại",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Tuyệt vời! Tất cả tài liệu của bạn đã được sắp xếp và tổ chức.",
+                    text = "Mở Tất cả để xem thư viện, hoặc thêm tài liệu mới bằng nút phía dưới.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
                 )
-            } else if (smartView == LibrarySmartView.ARCHIVED) {
+            } else if (smartView != LibrarySmartView.ALL) {
                 Text(
-                    text = "Không có tài liệu lưu trữ",
+                    text = "Chưa có tài liệu trong ${smartView.displayName}",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Các tài liệu đã đọc xong hoặc muốn ẩn đi sẽ hiển thị ở đây.",
+                    text = "Bộ lọc hiện tại chưa có kết quả. Chọn Tất cả ở phía trên để xem lại thư viện.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -2466,11 +2470,11 @@ private fun EmptyDocumentsView(
                     textAlign = TextAlign.Center
                 )
                 Spacer(modifier = Modifier.height(20.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Button(onClick = onImportClick) {
                         Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Nhập tài liệu")
+                        Text("Thêm tài liệu")
                     }
                     OutlinedButton(onClick = onNavigateToDiscover) {
                         Text("Khám phá sách")

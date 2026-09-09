@@ -25,6 +25,8 @@ private fun Context.activity(): Activity? = when(this){is Activity -> this;is Co
     val scope=rememberCoroutineScope()
     LaunchedEffect(play){play.connect()}
     val pro=EntitlementPolicy.allows(Feature.MULTI_DEVICE_SYNC,state.entitlement,repo.activeUser())
+    val purchaseAvailable = com.nocap.app.BuildConfig.PLAY_PRO_PRODUCT_ID.isNotBlank() &&
+        state.entitlement?.let { it.userId == repo.activeUser() && it.configured } == true
     Card(Modifier.fillMaxWidth().padding(bottom=16.dp)){
         Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
             Text("Gói: ${if(pro) "Pro" else "Free"}",style=MaterialTheme.typography.titleMedium)
@@ -36,8 +38,10 @@ private fun Context.activity(): Activity? = when(this){is Activity -> this;is Co
                 if(e.status in setOf("EXPIRED","ON_HOLD","PAUSED","INVALID"))Text("Pro không hoạt động. Tài liệu và thay đổi chưa đồng bộ vẫn được giữ trên máy.")
             }
             state.message?.let { Text(it) };billingMessage?.let { Text(it) }
-            Button(enabled=!state.loading && !pro,onClick={context.activity()?.let(play::purchase)}){Text("Nâng cấp Pro")}
-            OutlinedButton(onClick={play.restore()}){Text("Khôi phục giao dịch")}
+            if (!purchaseAvailable && !pro) Text("Pro chưa mở bán. Bạn vẫn có thể đọc và quản lý tài liệu trên máy với Free.",
+                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Button(enabled=!state.loading && !pro && purchaseAvailable,onClick={context.activity()?.let(play::purchase)}){Text("Nâng cấp Pro")}
+            OutlinedButton(enabled = !state.loading && repo.activeUser() != null, onClick={play.restore()}){Text("Khôi phục giao dịch")}
             TextButton(onClick={scope.launch { repo.refresh() }}){Text("Cập nhật trạng thái gói")}
         }
     }

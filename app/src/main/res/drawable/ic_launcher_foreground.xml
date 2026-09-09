@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Original PNG preserved. Padding keeps its alpha silhouette inside the 66dp safe circle. -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android" android:inset="20%">
+    <bitmap android:src="@drawable/nocap_foreground" android:gravity="fill" android:filter="true" />
+</inset>

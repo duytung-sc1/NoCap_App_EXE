@@ -1,5 +1,9 @@
 package com.nocap.app.presentation.reader
 
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+
 import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -948,7 +952,7 @@ fun ColorPickerRow(selectedColor: String, onColorSelected: (String) -> Unit) {
         colors.forEach { (name, color) ->
             Box(
                 modifier = Modifier
-                    .size(36.dp)
+                    .size(48.dp)
                     .clip(CircleShape)
                     .background(color)
                     .border(
@@ -956,7 +960,19 @@ fun ColorPickerRow(selectedColor: String, onColorSelected: (String) -> Unit) {
                         color = if (selectedColor.equals(name, ignoreCase = true)) MaterialTheme.colorScheme.primary else Color.Gray.copy(alpha = 0.5f),
                         shape = CircleShape
                     )
-                    .clickable { onColorSelected(name) }
+                    .selectable(
+                        selected = selectedColor.equals(name, ignoreCase = true),
+                        role = androidx.compose.ui.semantics.Role.RadioButton,
+                        onClick = { onColorSelected(name) }
+                    )
+                    .semantics {
+                        contentDescription = when (name) {
+                            "YELLOW" -> "Tô sáng màu vàng"
+                            "GREEN" -> "Tô sáng màu xanh lá"
+                            "BLUE" -> "Tô sáng màu xanh dương"
+                            else -> "Tô sáng màu hồng"
+                        }
+                    }
             )
         }
     }
