@@ -10,6 +10,7 @@ class EbookApplication : Application() {
         java.util.Locale.setDefault(java.util.Locale.forLanguageTag("vi-VN"))
         com.nocap.app.data.catalog.CloudCatalog.start(this)
         com.nocap.app.data.auth.CloudAuthRepository.getInstance(this)
+        com.nocap.app.data.billing.EntitlementRepository.get(this)
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             com.nocap.app.data.auth.CloudAuthRepository.getInstance(this@EbookApplication).authState.collect { auth ->
                 if(auth != com.nocap.app.domain.model.AuthState.Loading) {

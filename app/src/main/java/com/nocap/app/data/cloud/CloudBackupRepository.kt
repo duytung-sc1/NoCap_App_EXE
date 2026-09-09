@@ -32,13 +32,14 @@ class CloudBackupRepository(private val context: Context) {
 
     private val database = AppDatabase.getInstance(context)
     private val client = OkHttpClient.Builder().readTimeout(120,TimeUnit.SECONDS).writeTimeout(120,TimeUnit.SECONDS).build()
-    private suspend fun token(): String {
+    private suspend fun token(requireCloud: Boolean = true): String {
         val auth=CloudAuthRepository.getInstance(context)
         val token=auth.getIdToken(false) ?: error("Vui lòng đăng nhập")
         val user=client.newCall(Request.Builder().url("${BuildConfig.BACKEND_BASE_URL}/api/v1/me").header("Authorization","Bearer $token").build()).execute().use {
             check(it.isSuccessful) { "Phiên đăng nhập hết hạn" };JSONObject(it.body!!.string()).getString("id")
         }
         check(profile=="ACCOUNT:$user") { "Tài khoản đã thay đổi; vui lòng mở lại trang sao lưu" }
+        if(requireCloud)com.nocap.app.data.billing.EntitlementRepository.get(context).require(com.nocap.app.data.billing.Feature.CLOUD_BACKUP,profile)
         return token
     }
     private fun call(path: String, token: String, method: String = "GET", body: RequestBody? = null): okhttp3.Response {
@@ -190,5 +191,5 @@ class CloudBackupRepository(private val context: Context) {
             "Đã khôi phục thư viện. Đóng và mở lại ứng dụng để tải lại toàn bộ dữ liệu."
         } finally { zipFile.delete();if(!committed) { staging.deleteRecursively();restoredFonts.forEach { it.delete() } } }
     } }
-    suspend fun deleteBackup(): Result<String> = withContext(Dispatchers.IO) { runCatching { call("backup",token(),"DELETE").close();"Đã xóa bản sao lưu trên đám mây." } }
+    suspend fun deleteBackup(): Result<String> = withContext(Dispatchers.IO) { runCatching { call("backup",token(requireCloud=false),"DELETE").close();"Đã xóa bản sao lưu trên đám mây." } }
 }

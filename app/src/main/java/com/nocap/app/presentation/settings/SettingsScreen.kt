@@ -145,6 +145,7 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 12.dp)
         ) {
+            PlanCard()
             // SECTION 0: TÀI KHOẢN (ACCOUNT / AUTH - M8B)
             if (authState is AuthState.Authenticated) {
                 Card(modifier = Modifier.fillMaxWidth()) {

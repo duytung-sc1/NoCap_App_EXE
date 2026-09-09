@@ -74,6 +74,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onStart() {
         super.onStart()
+        com.nocap.app.data.billing.PlayBilling.get(this).connect()
         com.nocap.app.data.sync.SyncScheduler.now(this)
     }
 

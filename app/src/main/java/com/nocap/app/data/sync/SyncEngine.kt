@@ -45,13 +45,14 @@ class SyncEngine(private val context: Context, private val profile: String) {
 
     private fun callAbsolute(url: String, method: String = "GET", body: RequestBody? = null): okhttp3.Response {
         val response = client.newCall(Request.Builder().url(url).header("Authorization", "Bearer $token").method(method,body).build()).execute()
-        if (!response.isSuccessful) { val code=response.code; response.close(); error("Đồng bộ thất bại (HTTP $code)") }
+        if (!response.isSuccessful) { val code=response.code; val pro=code==403 && response.body?.string()?.contains("PRO_REQUIRED")==true;response.close();if(pro)throw com.nocap.app.data.billing.ProRequired();error("Đồng bộ thất bại (HTTP $code)") }
         return response
     }
     private fun call(path: String, method: String = "GET", body: RequestBody? = null) = callAbsolute("${BuildConfig.BACKEND_BASE_URL}/api/v1/sync/$path",method,body)
     suspend fun blobRequest(hash: String): Request {
         check(Regex("[a-f0-9]{64}").matches(hash))
         authenticate()
+        com.nocap.app.data.billing.EntitlementRepository.get(context).require(com.nocap.app.data.billing.Feature.PRIVATE_CLOUD,profile)
         return Request.Builder().url("${BuildConfig.BACKEND_BASE_URL}/api/v1/sync/blobs/$hash").header("Authorization","Bearer $token").build()
     }
     private fun jsonBody(data: JSONObject) = data.toString().toRequestBody("application/json".toMediaType())
@@ -274,6 +275,8 @@ class SyncEngine(private val context: Context, private val profile: String) {
     }
     suspend fun run() = withContext(Dispatchers.IO) {
         authenticate()
+        val grant=com.nocap.app.data.billing.EntitlementRepository.get(context).require(com.nocap.app.data.billing.Feature.MULTI_DEVICE_SYNC,profile)
+        com.nocap.app.data.billing.EntitlementPolicy.withAccess(com.nocap.app.data.billing.Feature.MULTI_DEVICE_SYNC,grant,profile.removePrefix("ACCOUNT:")) {
         var batches=0
         while(true) {
             val operations=pending();if(operations.length()==0)break
@@ -283,5 +286,6 @@ class SyncEngine(private val context: Context, private val profile: String) {
             if(++batches>=100)break
         }
         uploadBlobs();pull()
+        }
     }
 }

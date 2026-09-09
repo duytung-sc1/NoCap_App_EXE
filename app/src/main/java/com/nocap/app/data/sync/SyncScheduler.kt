@@ -74,6 +74,10 @@ class SyncWorker(context: Context,params: WorkerParameters): CoroutineWorker(con
                 })
                 Result.success()
             } catch(e: CancellationException){throw e}
+            catch(e: com.nocap.app.data.billing.ProRequired) {
+                SyncScheduler.report(profile,e.message!!)
+                Result.success() // Keep outbox intact; login/foreground/periodic sync rechecks entitlement.
+            }
             catch(e: Exception) {
                 SyncScheduler.report(profile,"Chưa đồng bộ: ${e.message ?: "lỗi kết nối"}. Dữ liệu vẫn được giữ trên máy.")
                 Result.retry()

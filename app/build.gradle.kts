@@ -18,6 +18,9 @@ android {
         buildConfigField("String", "BACKEND_BASE_URL", "\"https://nocap-ebook-api.buiminhhien001.workers.dev\"")
         resValue("string", "default_web_client_id", "847491126060-3dikoskpsf80ibrnf799tivmpe8vj2bn.apps.googleusercontent.com")
 
+        val proProduct = providers.gradleProperty("PLAY_PRO_PRODUCT_ID").orElse("").get()
+        require(proProduct.matches(Regex("[a-zA-Z0-9._-]*")))
+        buildConfigField("String", "PLAY_PRO_PRODUCT_ID", "\"$proProduct\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -67,6 +70,7 @@ kotlin {
 }
 
 dependencies {
+    implementation("com.android.billingclient:billing-ktx:9.1.0")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 
     // Jetpack Compose BOM & UI (2024.10.01 -> Compose 1.7.5, compatible with compileSdk 36 / AGP 8.10.1)
