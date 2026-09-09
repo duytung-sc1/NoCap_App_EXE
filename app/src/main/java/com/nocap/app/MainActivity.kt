@@ -43,13 +43,24 @@ class MainActivity : FragmentActivity() {
         handleIntent(intent)
 
         setContent {
+            val auth by com.nocap.app.data.auth.CloudAuthRepository.getInstance(this).authState.collectAsStateWithLifecycle()
+            val profile by com.nocap.app.data.sync.Profiles.active.collectAsStateWithLifecycle()
+            androidx.compose.runtime.LaunchedEffect(profile, auth) {
+                if (auth != com.nocap.app.domain.model.AuthState.Loading) {
+                    com.nocap.app.data.sync.SyncScheduler.start(this@MainActivity, profile)
+                }
+            }
             EbookAppTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     val sharedSource by pendingSharedSource.collectAsStateWithLifecycle()
+                    if (auth == com.nocap.app.domain.model.AuthState.Loading) {
+                        androidx.compose.material3.CircularProgressIndicator()
+                    } else androidx.compose.runtime.key(profile) {
                     AppNavHost(
                         pendingImportSource = sharedSource,
                         onClearPendingImport = { pendingSharedSource.value = null }
                     )
+                    }
                 }
             }
         }
@@ -59,6 +70,11 @@ class MainActivity : FragmentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleIntent(intent)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        com.nocap.app.data.sync.SyncScheduler.now(this)
     }
 
     private fun handleIntent(intent: Intent?) {

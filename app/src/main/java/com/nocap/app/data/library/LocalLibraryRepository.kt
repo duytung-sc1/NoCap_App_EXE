@@ -35,7 +35,7 @@ class LocalLibraryRepository(
         val allColsFlow = collectionDao?.observeCollections() ?: flowOf(emptyList())
 
         return combine(
-            downloadDao.observeCompletedDownloads(),
+            downloadDao.observeAllDownloads(),
             progressDao.observeRecentlyRead(),
             favoriteDao.observeFavorites(),
             tagCrossRefsFlow,
@@ -62,7 +62,11 @@ class LocalLibraryRepository(
             }
             val catalogMap = allCatalogBooks.associateBy { it.id }
 
-            downloads.mapNotNull { downloadEntity ->
+            val downloadById = downloads.associateBy { it.bookId }
+            allCatalogBooks.mapNotNull { metadata ->
+                val downloadEntity = downloadById[metadata.id] ?: com.nocap.app.core.database.entity.DownloadedBookEntity(
+                    bookId = metadata.id, localFilePath = "", downloadStatus = com.nocap.app.domain.model.DownloadStatus.NOT_DOWNLOADED
+                )
                 val bookId = downloadEntity.bookId
                 val catalogBook = catalogMap[bookId]?.toDomain()
                     ?: catalogDao.getBookById(bookId)?.toDomain()

@@ -97,7 +97,7 @@ class BookDetailsViewModel(
                     BookPrimaryAction.Read
                 }
             }
-            DownloadStatus.CANCELLED -> BookPrimaryAction.Download
+            DownloadStatus.CANCELLED, DownloadStatus.NOT_DOWNLOADED -> BookPrimaryAction.Download
         }
     }
 

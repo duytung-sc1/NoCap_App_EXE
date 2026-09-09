@@ -45,11 +45,13 @@ class BookDownloadWorker(
         val expectedHash = inputData.getString(KEY_EXPECTED_HASH)
         val expectedSize = inputData.getLong(KEY_EXPECTED_SIZE, 0L)
 
-        val database = AppDatabase.getInstance(applicationContext)
+        val profile = inputData.getString("sync_profile") ?: com.nocap.app.data.sync.Profiles.LOCAL
+        val profileFiles = com.nocap.app.data.sync.Profiles.files(applicationContext, profile)
+        val database = AppDatabase.getInstance(applicationContext, profile)
         val downloadDao = database.downloadDao()
 
-        val booksDir = File(applicationContext.filesDir, "books").apply { if (!exists()) mkdirs() }
-        val tempDir = File(applicationContext.filesDir, "temp").apply { if (!exists()) mkdirs() }
+        val booksDir = File(profileFiles, "books").apply { if (!exists()) mkdirs() }
+        val tempDir = File(profileFiles, "temp").apply { if (!exists()) mkdirs() }
         val tempFile = File(tempDir, "$bookId.tmp")
         val targetFile = File(booksDir, "$bookId.epub")
 
@@ -75,7 +77,9 @@ class BookDownloadWorker(
             }
 
             // 2. Execute streaming request
-            val request = Request.Builder()
+            val request = if (fileUrl.startsWith("nocap-private:")) {
+                com.nocap.app.data.sync.SyncEngine(applicationContext,profile).blobRequest(fileUrl.removePrefix("nocap-private:"))
+            } else Request.Builder()
                 .url(fileUrl)
                 .header("User-Agent", "EbookReaderApp/1.0")
                 .build()

@@ -202,7 +202,7 @@ class Milestone3IntegrationTest {
                     BookPrimaryAction.Read
                 }
             }
-            DownloadStatus.CANCELLED -> BookPrimaryAction.Download
+            DownloadStatus.CANCELLED, DownloadStatus.NOT_DOWNLOADED -> BookPrimaryAction.Download
         }
     }
 }

@@ -149,7 +149,12 @@ fun SettingsScreen(
             if (authState is AuthState.Authenticated) {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp)) {
-                        Text("Thư viện đám mây", fontWeight = FontWeight.Bold)
+                        Text("Đồng bộ nhiều thiết bị", fontWeight = FontWeight.Bold)
+                        val syncStatus by com.nocap.app.data.sync.SyncScheduler.status.collectAsStateWithLifecycle()
+                        val syncContext = androidx.compose.ui.platform.LocalContext.current
+                        Text(syncStatus)
+                        Button(onClick = { com.nocap.app.data.sync.SyncScheduler.now(syncContext) }) { Text("Đồng bộ ngay") }
+                        Text("Thư viện đám mây — bản sao lưu ZIP", fontWeight = FontWeight.Bold)
                         Text("Sao lưu và khôi phục sách, ghi chú, tiến độ, thẻ và bộ sưu tập.")
                         if (cloudBusy) CircularProgressIndicator(Modifier.padding(8.dp))
                         cloudMessage?.let { Text(it, modifier = Modifier.padding(vertical = 8.dp)) }

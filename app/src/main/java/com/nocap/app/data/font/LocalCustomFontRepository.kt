@@ -18,6 +18,9 @@ class LocalCustomFontRepository(
     private val context: Context,
     private val customFontDao: CustomFontDao
 ) : CustomFontRepository {
+    private val profile = com.nocap.app.data.sync.Profiles.active.value
+    private val profileFiles = com.nocap.app.data.sync.Profiles.files(context, profile)
+
 
     companion object {
         const val FONTS_DIR_NAME = "custom_fonts"
@@ -70,7 +73,7 @@ class LocalCustomFontRepository(
             val sanitizedFileName = sanitizeFontFileName(fileName)
             val fontName = sanitizedFileName.substringBeforeLast(".").replace("_", " ").trim()
 
-            val fontsDir = File(context.filesDir, FONTS_DIR_NAME).apply { if (!exists()) mkdirs() }
+            val fontsDir = File(profileFiles, FONTS_DIR_NAME).apply { if (!exists()) mkdirs() }
             val tempFile = File(fontsDir, "temp_${UUID.randomUUID()}.tmp")
 
             var totalBytes = 0L
@@ -138,7 +141,7 @@ class LocalCustomFontRepository(
             val fonts = customFontDao.getAllFonts()
             val target = fonts.find { it.id == id }
             if (target != null) {
-                val file = File(File(context.filesDir, FONTS_DIR_NAME), target.fileName)
+                val file = File(File(profileFiles, FONTS_DIR_NAME), target.fileName)
                 if (file.exists()) {
                     file.delete()
                 }

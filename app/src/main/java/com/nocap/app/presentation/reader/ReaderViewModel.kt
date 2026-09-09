@@ -242,7 +242,19 @@ class ReaderViewModel(
         viewModelScope.launch {
             _uiState.value = ReaderUiState.Loading
 
-            val downloaded = downloadRepository.observeDownload(bookId).first()
+            var downloaded = downloadRepository.observeDownload(bookId).first()
+            if (downloaded == null || downloaded.downloadStatus != DownloadStatus.COMPLETED) {
+                try {
+                    downloadRepository.startDownload(bookId)
+                    downloaded = kotlinx.coroutines.withTimeout(180_000) {
+                        downloadRepository.observeDownload(bookId).first { it?.downloadStatus == DownloadStatus.COMPLETED || it?.downloadStatus == DownloadStatus.FAILED }
+                    }
+                } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException && e !is kotlinx.coroutines.TimeoutCancellationException) throw e
+                    _uiState.value = ReaderUiState.Error(e.message ?: "Chưa tải được tài liệu")
+                    return@launch
+                }
+            }
             if (downloaded == null || downloaded.downloadStatus != DownloadStatus.COMPLETED) {
                 _uiState.value = ReaderUiState.BookNotDownloaded
                 return@launch

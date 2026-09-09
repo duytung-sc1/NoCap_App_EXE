@@ -12,6 +12,8 @@ import com.nocap.app.domain.repository.AuthTokenProvider
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.MediaType.Companion.toMediaType
@@ -24,6 +26,8 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 class CloudAuthRepository private constructor(context: Context) : AuthRepository, AuthTokenProvider {
+    private val authMutex = Mutex()
+    private suspend fun <T> serialized(block: () -> T): T = withContext(Dispatchers.IO) { authMutex.withLock { block() } }
     private val prefs = context.getSharedPreferences("cloud_auth", Context.MODE_PRIVATE)
     private val client = OkHttpClient()
     private val state = MutableStateFlow<AuthState>(AuthState.Loading)
@@ -59,10 +63,11 @@ class CloudAuthRepository private constructor(context: Context) : AuthRepository
     private fun publish(user: JSONObject): AuthUser {
         fun optional(key: String) = user.optString(key).takeIf { it.isNotBlank() && it != "null" }
         val value = AuthUser(user.getString("id"), optional("email"), optional("displayName"), optional("photoUrl"), user.optBoolean("emailVerified"), "cloudflare")
+        com.nocap.app.data.sync.Profiles.select("ACCOUNT:${value.uid}")
         state.value = if (value.isEmailVerified) AuthState.Authenticated(value) else AuthState.RequiresEmailVerification(value)
         return value
     }
-    private fun clear() { token = null; prefs.edit().clear().commit(); state.value = AuthState.Guest }
+    private fun clear() { token = null; prefs.edit().clear().commit(); com.nocap.app.data.sync.Profiles.select(com.nocap.app.data.sync.Profiles.LOCAL); state.value = AuthState.Guest }
     private fun request(path: String, method: String = "POST", data: JSONObject = JSONObject()): JSONObject {
         val builder = Request.Builder().url("${BuildConfig.BACKEND_BASE_URL}$path")
             .method(method, if (method == "GET" || method == "DELETE") null else data.toString().toRequestBody("application/json".toMediaType()))
@@ -77,27 +82,27 @@ class CloudAuthRepository private constructor(context: Context) : AuthRepository
             return result
         }
     }
-    private suspend fun login(path: String, data: JSONObject): Result<AuthUser> = withContext(Dispatchers.IO) {
+    private suspend fun login(path: String, data: JSONObject): Result<AuthUser> = serialized {
         runCatching {
             val result = request("/api/v1/auth/$path", data = data)
-            token = result.getString("token")
             check(prefs.edit().putString("session", encrypt(result.toString())).commit()) { "Không lưu được phiên đăng nhập" }
+            token = result.getString("token")
             publish(result.getJSONObject("user"))
         }
     }
     override suspend fun registerWithEmail(email: String, password: String) = login("register", JSONObject().put("email", email).put("password", password))
     override suspend fun loginWithEmail(email: String, password: String) = login("login", JSONObject().put("email", email).put("password", password))
     override suspend fun signInWithGoogle(idToken: String) = login("google", JSONObject().put("idToken", idToken))
-    override suspend fun sendEmailVerification(): Result<Unit> = withContext(Dispatchers.IO) { runCatching { request("/api/v1/auth/send-verification"); Unit } }
-    override suspend fun sendPasswordReset(email: String): Result<Unit> = withContext(Dispatchers.IO) { runCatching { request("/api/v1/auth/forgot-password", data = JSONObject().put("email", email)); Unit } }
-    override suspend fun reloadUser(): Result<AuthState> = withContext(Dispatchers.IO) { runCatching { publish(request("/api/v1/auth/user", "GET").getJSONObject("user")); state.value } }
-    override suspend fun updateProfile(displayName: String?, photoUrl: String?): Result<Unit> = withContext(Dispatchers.IO) {
+    override suspend fun sendEmailVerification(): Result<Unit> = serialized { runCatching { request("/api/v1/auth/send-verification"); Unit } }
+    override suspend fun sendPasswordReset(email: String): Result<Unit> = serialized { runCatching { request("/api/v1/auth/forgot-password", data = JSONObject().put("email", email)); Unit } }
+    override suspend fun reloadUser(): Result<AuthState> = serialized { runCatching { publish(request("/api/v1/auth/user", "GET").getJSONObject("user")); state.value } }
+    override suspend fun updateProfile(displayName: String?, photoUrl: String?): Result<Unit> = serialized {
         runCatching { publish(request("/api/v1/me", "PATCH", JSONObject().apply { displayName?.let { put("displayName", it) }; photoUrl?.let { put("photoUrl", it) } })); Unit }
     }
-    override suspend fun signOut() = withContext(Dispatchers.IO) { runCatching { if (token != null) request("/api/v1/auth/logout") }; clear() }
-    override suspend fun deleteAccount(): Result<Unit> = withContext(Dispatchers.IO) { runCatching { request("/api/v1/me", "DELETE"); clear() } }
+    override suspend fun signOut() = serialized { runCatching { if (token != null) request("/api/v1/auth/logout") }; clear() }
+    override suspend fun deleteAccount(): Result<Unit> = serialized { runCatching { request("/api/v1/me", "DELETE"); clear() } }
     override fun continueAsGuest() { CoroutineScope(Dispatchers.IO).launch { runCatching { signOut() } } }
-    override suspend fun getIdToken(forceRefresh: Boolean): String? = token
+    override suspend fun getIdToken(forceRefresh: Boolean): String? = authMutex.withLock { token }
     companion object {
         @Volatile private var instance: CloudAuthRepository? = null
         fun getInstance(context: Context): CloudAuthRepository = instance ?: synchronized(this) { instance ?: CloudAuthRepository(context.applicationContext).also { instance = it } }

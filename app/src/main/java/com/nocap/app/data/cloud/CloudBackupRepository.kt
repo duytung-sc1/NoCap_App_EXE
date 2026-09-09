@@ -27,9 +27,20 @@ import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
 class CloudBackupRepository(private val context: Context) {
+    private val profile = com.nocap.app.data.sync.Profiles.active.value
+    private val profileFiles = com.nocap.app.data.sync.Profiles.files(context, profile)
+
     private val database = AppDatabase.getInstance(context)
     private val client = OkHttpClient.Builder().readTimeout(120,TimeUnit.SECONDS).writeTimeout(120,TimeUnit.SECONDS).build()
-    private suspend fun token() = CloudAuthRepository.getInstance(context).getIdToken(false) ?: error("Vui lòng đăng nhập")
+    private suspend fun token(): String {
+        val auth=CloudAuthRepository.getInstance(context)
+        val token=auth.getIdToken(false) ?: error("Vui lòng đăng nhập")
+        val user=client.newCall(Request.Builder().url("${BuildConfig.BACKEND_BASE_URL}/api/v1/me").header("Authorization","Bearer $token").build()).execute().use {
+            check(it.isSuccessful) { "Phiên đăng nhập hết hạn" };JSONObject(it.body!!.string()).getString("id")
+        }
+        check(profile=="ACCOUNT:$user") { "Tài khoản đã thay đổi; vui lòng mở lại trang sao lưu" }
+        return token
+    }
     private fun call(path: String, token: String, method: String = "GET", body: RequestBody? = null): okhttp3.Response {
         val response = client.newCall(Request.Builder().url("${BuildConfig.BACKEND_BASE_URL}/api/v1/cloud/$path")
             .header("Authorization", "Bearer $token").method(method,body).build()).execute()
@@ -39,7 +50,7 @@ class CloudBackupRepository(private val context: Context) {
         }
         return response
     }
-    private fun tables(): List<String> = database.openHelper.writableDatabase.query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT IN ('android_metadata','room_master_table')").use { cursor ->
+    private fun tables(): List<String> = database.openHelper.writableDatabase.query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'sync_%' AND name NOT IN ('android_metadata','room_master_table')").use { cursor ->
         buildList { while(cursor.moveToNext()) add(cursor.getString(0)) }
     }
     private fun hash(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
@@ -54,7 +65,7 @@ class CloudBackupRepository(private val context: Context) {
         try {
             val data = database.withTransaction {
                 requireIdleDownloads()
-                JSONObject().put("version",database.openHelper.writableDatabase.version).put("filesRoot",context.filesDir.absolutePath).put("tables",JSONObject().apply {
+                JSONObject().put("version",database.openHelper.writableDatabase.version).put("filesRoot",profileFiles.absolutePath).put("tables",JSONObject().apply {
                     for(table in tables()) {
                         val rows=JSONArray()
                         database.openHelper.writableDatabase.query("SELECT * FROM \"$table\"").use { cursor ->
@@ -79,9 +90,9 @@ class CloudBackupRepository(private val context: Context) {
             ZipOutputStream(file.outputStream().buffered()).use { zip ->
                 zip.putNextEntry(ZipEntry("database.json"));zip.write(data.toString().toByteArray());zip.closeEntry()
                 var total=0L
-                context.filesDir.walkTopDown().onEnter { it.name !in setOf("temp","datastore") }.filter { it.isFile }.forEach { source ->
+                profileFiles.walkTopDown().onEnter { it.name !in setOf("temp","datastore","profiles") }.filter { it.isFile }.forEach { source ->
                     total+=source.length();check(total<=2L*1024*1024*1024) { "Thư viện vượt giới hạn sao lưu 2 GiB" }
-                    val relative=source.relativeTo(context.filesDir).invariantSeparatorsPath
+                    val relative=source.relativeTo(profileFiles).invariantSeparatorsPath
                     zip.putNextEntry(ZipEntry("files/$relative"));source.inputStream().use { it.copyTo(zip) };zip.closeEntry()
                 }
             }
@@ -110,7 +121,7 @@ class CloudBackupRepository(private val context: Context) {
         val chunks=manifest.getJSONArray("chunks")
         check(chunks.length() in 1..100)
         val zipFile=File.createTempFile("cloud-restore-",".zip",context.cacheDir)
-        val staging=File(context.filesDir,"restored-${UUID.randomUUID()}").apply { mkdirs() }
+        val staging=File(profileFiles,"restored-${UUID.randomUUID()}").apply { mkdirs() }
         var committed=false
         val restoredFonts=mutableListOf<File>()
         try {
@@ -160,7 +171,7 @@ class CloudBackupRepository(private val context: Context) {
                                     if(table=="custom_fonts" && column=="file_name") {
                                         val source=File(newRoot,"custom_fonts/$value").canonicalFile
                                         check(source.path.startsWith(File(newRoot).canonicalPath+File.separator) && source.isFile) { "Thiếu tệp phông chữ" }
-                                        val target=File(File(context.filesDir,"custom_fonts").apply { mkdirs() },"${UUID.randomUUID()}-${source.name}")
+                                        val target=File(File(profileFiles,"custom_fonts").apply { mkdirs() },"${UUID.randomUUID()}-${source.name}")
                                         source.copyTo(target);restoredFonts.add(target);restored=target.name
                                     }
                                     content.put(column,restored)

@@ -1,6 +1,7 @@
 package com.nocap.app.domain.model
 
 enum class DownloadStatus {
+    NOT_DOWNLOADED,
     PENDING,
     DOWNLOADING,
     COMPLETED,

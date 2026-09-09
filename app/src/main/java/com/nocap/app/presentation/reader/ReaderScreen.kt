@@ -1409,7 +1409,7 @@ fun EpubNavigatorContainer(
                 id = containerId
                 if (activity != null) {
                     val factory = EpubNavigatorFactory(publication)
-                    val fontsDir = File(ctx.filesDir, "custom_fonts")
+                    val fontsDir = File(com.nocap.app.data.sync.Profiles.files(ctx), "custom_fonts")
                     val servedPaths = listOfNotNull(
                         if (fontsDir.exists()) fontsDir.absolutePath else null
                     )
@@ -1458,7 +1458,7 @@ fun EpubNavigatorContainer(
                         runCatching {
                             config.addFontFamilyDeclaration(FontFamily(font.fontFamily)) {
                                 addFontFace {
-                                    addSource(File(ctx.filesDir, "custom_fonts/" + font.fileName).absolutePath, false)
+                                    addSource(File(com.nocap.app.data.sync.Profiles.files(ctx), "custom_fonts/" + font.fileName).absolutePath, false)
                                 }
                             }
                         }

@@ -53,7 +53,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ReviewItemEntity::class,
         ReadingSessionEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -74,6 +74,12 @@ abstract class AppDatabase : RoomDatabase() {
     companion object {
         @Volatile
         private var INSTANCE: AppDatabase? = null
+        private val profileInstances = mutableMapOf<String, AppDatabase>()
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                com.nocap.app.data.sync.SyncSchema.install { db.execSQL(it) }
+            }
+        }
 
         val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -273,13 +279,19 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
-        fun getInstance(context: Context): AppDatabase {
-            return INSTANCE ?: synchronized(this) {
-                INSTANCE ?: Room.databaseBuilder(
+        fun getInstance(context: Context, profile: String = com.nocap.app.data.sync.Profiles.active.value): AppDatabase {
+            return synchronized(this) {
+                profileInstances.getOrPut(profile) { Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    "ebook_reader.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build().also { INSTANCE = it }
+                    com.nocap.app.data.sync.Profiles.databaseName(profile)
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                    .addCallback(object : Callback() {
+                        override fun onOpen(db: SupportSQLiteDatabase) {
+                            com.nocap.app.data.sync.SyncSchema.install { db.execSQL(it) }
+                            db.execSQL("UPDATE sync_control SET profile=? WHERE id=1", arrayOf(profile))
+                        }
+                    }).build() }
             }
         }
     }

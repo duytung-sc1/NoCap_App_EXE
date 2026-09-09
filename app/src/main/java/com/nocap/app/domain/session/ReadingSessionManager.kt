@@ -24,13 +24,14 @@ class ReadingSessionManager(
 
         @Volatile
         private var INSTANCE: ReadingSessionManager? = null
+        private val profiles = mutableMapOf<String, ReadingSessionManager>()
 
         fun getInstance(context: Context): ReadingSessionManager {
-            return INSTANCE ?: synchronized(this) {
-                INSTANCE ?: ReadingSessionManager(
+            return synchronized(this) {
+                profiles.getOrPut(com.nocap.app.data.sync.Profiles.active.value) { ReadingSessionManager(
                     readingSessionDao = AppDatabase.getInstance(context).readingSessionDao(),
                     scope = processScope
-                ).also { INSTANCE = it }
+                ) }
             }
         }
     }
@@ -131,4 +132,3 @@ class ReadingSessionManager(
         }
     }
 }
-

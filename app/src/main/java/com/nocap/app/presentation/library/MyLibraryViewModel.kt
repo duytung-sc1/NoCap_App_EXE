@@ -93,6 +93,7 @@ class MyLibraryViewModel(
     private val tagRepository: TagRepository,
     private val preferencesDataStore: LibraryPreferencesDataStore? = null
 ) : ViewModel() {
+    private val profile = com.nocap.app.data.sync.Profiles.active.value
 
     private val _selectedTab = MutableStateFlow(LibraryTab.ALL)
     private val _selectedSmartView = MutableStateFlow(LibrarySmartView.ALL)
@@ -451,7 +452,7 @@ class MyLibraryViewModel(
                 }
 
                 // 3. Copy to private covers/ directory
-                val coversDir = File(context.filesDir, "covers").apply { if (!exists()) mkdirs() }
+                val coversDir = File(com.nocap.app.data.sync.Profiles.files(context, profile), "covers").apply { if (!exists()) mkdirs() }
                 val coverFile = File(coversDir, "${bookId}_cover.jpg")
                 cr.openInputStream(uri)?.use { input ->
                     FileOutputStream(coverFile).use { output ->
@@ -470,7 +471,7 @@ class MyLibraryViewModel(
 
     fun onRemoveCustomCover(bookId: String, context: Context) {
         viewModelScope.launch {
-            val coversDir = File(context.filesDir, "covers")
+            val coversDir = File(com.nocap.app.data.sync.Profiles.files(context, profile), "covers")
             val coverFile = File(coversDir, "${bookId}_cover.jpg")
             if (coverFile.exists()) coverFile.delete()
             libraryRepository.setCustomCover(bookId, null)

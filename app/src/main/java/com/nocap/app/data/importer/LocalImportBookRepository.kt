@@ -42,6 +42,9 @@ class LocalImportBookRepository(
     private val publicationManager: ReadiumPublicationManager = ReadiumPublicationManager(context),
     private val remoteDownloader: RemotePublicationDownloader = RemotePublicationDownloader(context)
 ) : ImportBookRepository {
+    private val profile = com.nocap.app.data.sync.Profiles.active.value
+    private val profileFiles = com.nocap.app.data.sync.Profiles.files(context, profile)
+
 
     override suspend fun importEpub(uri: Uri): Result<String> {
         return importPublication(PublicationSource.LocalUri(uri))
@@ -203,7 +206,7 @@ class LocalImportBookRepository(
             }
 
             // 5. Atomic move to permanent directory
-            val importedDir = File(context.filesDir, "imported").apply { if (!exists()) mkdirs() }
+            val importedDir = File(profileFiles, "imported").apply { if (!exists()) mkdirs() }
             val bookId = "imported_${sha256.take(12)}"
             val ext = FormatSniffer.extensionFor(format)
             val finalFile = File(importedDir, "$bookId.$ext")
@@ -225,7 +228,7 @@ class LocalImportBookRepository(
             if (format.isSingleImage) {
                 customCoverPath = finalFile.absolutePath
             } else if (format == PublicationFormat.CBZ) {
-                val coversDir = File(context.filesDir, "covers").apply { if (!exists()) mkdirs() }
+                val coversDir = File(profileFiles, "covers").apply { if (!exists()) mkdirs() }
                 val coverFile = File(coversDir, "$bookId.jpg")
                 if (CbzParser.extractFirstPageThumbnail(finalFile, coverFile)) {
                     customCoverPath = coverFile.absolutePath

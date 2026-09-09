@@ -27,6 +27,9 @@ class LocalBookDownloadRepository(
     private val catalogDao: CatalogDao,
     private val catalogRepository: CatalogRepository
 ) : BookDownloadRepository {
+    private val profile = com.nocap.app.data.sync.Profiles.active.value
+    private val profileFiles = com.nocap.app.data.sync.Profiles.files(context, profile)
+
 
     private val workManager by lazy { WorkManager.getInstance(context) }
 
@@ -65,7 +68,7 @@ class LocalBookDownloadRepository(
             }
         }
 
-        val targetFile = File(File(context.filesDir, "books"), "$bookId.epub")
+        val targetFile = File(File(profileFiles, "books"), "$bookId.epub")
 
         // Update database with PENDING state
         downloadDao.upsertDownload(
@@ -89,6 +92,7 @@ class LocalBookDownloadRepository(
             .build()
 
         val inputData = workDataOf(
+            "sync_profile" to profile,
             BookDownloadWorker.KEY_BOOK_ID to bookId,
             BookDownloadWorker.KEY_FILE_URL to (book?.fileUrl ?: ""),
             BookDownloadWorker.KEY_EXPECTED_VERSION to (book?.contentVersion ?: 1L),
@@ -99,21 +103,21 @@ class LocalBookDownloadRepository(
         val workRequest = OneTimeWorkRequestBuilder<BookDownloadWorker>()
             .setConstraints(constraints)
             .setInputData(inputData)
-            .addTag("download_$bookId")
+            .addTag("download_${com.nocap.app.data.sync.Profiles.key(profile)}_$bookId")
             .build()
 
         workManager.enqueueUniqueWork(
-            "download_$bookId",
+            "download_${com.nocap.app.data.sync.Profiles.key(profile)}_$bookId",
             ExistingWorkPolicy.REPLACE,
             workRequest
         )
     }
 
     override suspend fun cancelDownload(bookId: String) {
-        workManager.cancelUniqueWork("download_$bookId")
+        workManager.cancelUniqueWork("download_${com.nocap.app.data.sync.Profiles.key(profile)}_$bookId")
 
         // Clean up temp file
-        val tempFile = File(File(context.filesDir, "temp"), "$bookId.tmp")
+        val tempFile = File(File(profileFiles, "temp"), "$bookId.tmp")
         if (tempFile.exists()) {
             tempFile.delete()
         }
@@ -137,7 +141,7 @@ class LocalBookDownloadRepository(
     override suspend fun deleteDownloadedBook(bookId: String) {
         cancelDownload(bookId)
 
-        val targetFile = File(File(context.filesDir, "books"), "$bookId.epub")
+        val targetFile = File(File(profileFiles, "books"), "$bookId.epub")
         if (targetFile.exists()) {
             targetFile.delete()
         }

@@ -22,6 +22,9 @@ android {
     }
 
     buildTypes {
+        debug {
+            buildConfigField("String", "BACKEND_BASE_URL", "\"https://nocap-ebook-api-qa.buiminhhien001.workers.dev\"")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
