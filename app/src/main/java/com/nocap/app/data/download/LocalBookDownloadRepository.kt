@@ -46,6 +46,7 @@ class LocalBookDownloadRepository(
     }
 
     override suspend fun startDownload(bookId: String) {
+        require(com.nocap.app.core.util.DocumentIds.isSafe(bookId)) { "Mã tài liệu không hợp lệ" }
         val currentDownload = downloadDao.getDownloadByBookId(bookId)
         if (currentDownload?.downloadStatus == DownloadStatus.DOWNLOADING ||
             currentDownload?.downloadStatus == DownloadStatus.PENDING

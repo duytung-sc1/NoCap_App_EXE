@@ -4,6 +4,20 @@ import java.io.File
 import java.util.zip.ZipInputStream
 
 internal object CloudArchive {
+    fun restoredPath(table: String, column: String, value: String, oldRoot: String, newRoot: File): String {
+        val localPath = (table == "downloaded_books" && column == "local_file_path") ||
+            (table == "catalog_books" && column == "custom_cover_path")
+        val cover = table == "catalog_books" && column == "cover_url"
+        if (value.startsWith(oldRoot)) return target(newRoot, value.removePrefix(oldRoot)).absolutePath
+        if (localPath && value.isNotEmpty()) error("Đường dẫn tài liệu nằm ngoài bản sao lưu")
+        if (cover && value.isNotEmpty()) {
+            val uri = java.net.URI(value)
+            require(uri.scheme in setOf("https", "http") && !uri.host.isNullOrBlank() && uri.userInfo == null) {
+                "Đường dẫn bìa không hợp lệ"
+            }
+        }
+        return value
+    }
     fun target(root: File, relative: String): File {
         require(relative.isNotBlank() && !relative.contains('\\') && relative.split('/').none { it == ".." || it == "." }) { "Đường dẫn sao lưu không hợp lệ" }
         val file=File(root,relative).canonicalFile

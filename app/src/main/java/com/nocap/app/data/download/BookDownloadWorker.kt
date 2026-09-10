@@ -40,6 +40,7 @@ class BookDownloadWorker(
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val bookId = inputData.getString(KEY_BOOK_ID) ?: return@withContext Result.failure()
+        if (!com.nocap.app.core.util.DocumentIds.isSafe(bookId)) return@withContext Result.failure()
         val fileUrl = inputData.getString(KEY_FILE_URL) ?: return@withContext Result.failure()
         val expectedVersion = inputData.getLong(KEY_EXPECTED_VERSION, 1L)
         val expectedHash = inputData.getString(KEY_EXPECTED_HASH)

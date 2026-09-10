@@ -35,13 +35,18 @@ class CloudAuthRepository private constructor(context: Context) : AuthRepository
     @Volatile private var token: String? = null
     init {
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+          // Startup restoration must not publish an old account after logout/login.
+          serialized {
             runCatching { prefs.getString("session", null)?.let { stored ->
                 val data = JSONObject(decrypt(stored))
                 if (data.getLong("expiresAt") > System.currentTimeMillis() / 1000) {
                     token = data.getString("token"); publish(data.getJSONObject("user"))
                 }
             } }
-            if (token == null) state.value = AuthState.Guest else reloadUser()
+            if (token == null) clear() else runCatching {
+                publish(request("/api/v1/auth/user", "GET").getJSONObject("user"))
+            }
+          }
         }
     }
     private fun key(): SecretKey {

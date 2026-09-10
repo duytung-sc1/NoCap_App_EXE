@@ -9,6 +9,27 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
 class CloudArchiveTest {
+    @Test fun restoredPathsCannotReferenceAnotherAccountOrTraverse() {
+        val root=Files.createTempDirectory("restore-path-test").toFile()
+        try {
+            val old="/data/user/0/app/files/profiles/account-a/"
+            assertEquals(File(root,"books/a.epub").canonicalPath,
+                CloudArchive.restoredPath("downloaded_books","local_file_path",old+"books/a.epub",old,root))
+            for (path in listOf("/data/user/0/app/files/profiles/account-b/private.epub", "file:///private", old+"../account-b/private.epub")) {
+                assertThrows(RuntimeException::class.java) { CloudArchive.restoredPath("downloaded_books","local_file_path",path,old,root) }
+                assertThrows(RuntimeException::class.java) { CloudArchive.restoredPath("catalog_books","custom_cover_path",path,old,root) }
+            }
+            assertThrows(RuntimeException::class.java) { CloudArchive.restoredPath("catalog_books","cover_url","file:///private",old,root) }
+            assertEquals("https://example.test/cover",CloudArchive.restoredPath("catalog_books","cover_url","https://example.test/cover",old,root))
+            assertEquals("normal note",CloudArchive.restoredPath("highlights","note","normal note",old,root))
+        } finally { root.deleteRecursively() }
+    }
+    @Test fun unsafeDocumentIdsCannotBecomeFilePaths() {
+        for(id in listOf("../other", "a/b", "a\\b", "/absolute", "a..b", "a\u0000", "a".repeat(256)))
+            assertFalse(com.nocap.app.core.util.DocumentIds.isSafe(id))
+        for(id in listOf("gutenberg-11", "import_123", "abc.def", "a".repeat(255)))
+            assertTrue(com.nocap.app.core.util.DocumentIds.isSafe(id))
+    }
     private fun archive(root: File, name: String, content: String): File = File(root,"test.zip").also { file ->
         ZipOutputStream(file.outputStream()).use { zip -> zip.putNextEntry(ZipEntry(name));zip.write(content.toByteArray());zip.closeEntry() }
     }

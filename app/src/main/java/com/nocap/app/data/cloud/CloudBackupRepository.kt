@@ -30,7 +30,7 @@ class CloudBackupRepository(private val context: Context) {
     private val profile = com.nocap.app.data.sync.Profiles.active.value
     private val profileFiles = com.nocap.app.data.sync.Profiles.files(context, profile)
 
-    private val database = AppDatabase.getInstance(context)
+    private val database = AppDatabase.getInstance(context, profile)
     private val client = OkHttpClient.Builder().readTimeout(120,TimeUnit.SECONDS).writeTimeout(120,TimeUnit.SECONDS).build()
     private suspend fun token(requireCloud: Boolean = true): String {
         val auth=CloudAuthRepository.getInstance(context)
@@ -151,6 +151,9 @@ class CloudBackupRepository(private val context: Context) {
                 known.reversed().forEach { db.execSQL("DELETE FROM \"$it\"") }
                 for(table in known) {
                     val columns=db.query("PRAGMA table_info(\"$table\")").use { cursor -> buildSet { while(cursor.moveToNext()) add(cursor.getString(1)) } }
+                    val blobColumns=db.query("PRAGMA table_info(\"$table\")").use { cursor -> buildSet {
+                        while(cursor.moveToNext()) if(cursor.getString(2).equals("BLOB",ignoreCase=true)) add(cursor.getString(1))
+                    } }
                     val values=rows.getJSONArray(table)
                     for(i in 0 until values.length()) {
                         val row=values.getJSONObject(i);check(row.keys().asSequence().toSet()==columns)
@@ -158,16 +161,17 @@ class CloudBackupRepository(private val context: Context) {
                         for(column in columns) {
                             when(val value=row.get(column)) {
                                 JSONObject.NULL -> content.putNull(column)
-                                is JSONObject -> content.put(column,Base64.decode(value.getString("blob"),Base64.NO_WRAP))
+                                is JSONObject -> {
+                                    check(column in blobColumns) { "Kiểu dữ liệu sao lưu không hợp lệ" }
+                                    content.put(column,Base64.decode(value.getString("blob"),Base64.NO_WRAP))
+                                }
                                 is Int -> content.put(column,value)
                                 is Long -> content.put(column,value)
                                 is Number -> content.put(column,value.toDouble())
                                 is String -> {
-                                    var restored=value
-                                    if(value.startsWith(oldRoot)) {
-                                        val target=File(newRoot,value.removePrefix(oldRoot)).canonicalFile
-                                        check(target.path.startsWith(File(newRoot).canonicalPath+File.separator)) { "Đường dẫn dữ liệu không hợp lệ" }
-                                        restored=target.absolutePath
+                                    var restored=CloudArchive.restoredPath(table,column,value,oldRoot,File(newRoot))
+                                    if(table=="catalog_books" && column=="id") {
+                                        require(com.nocap.app.core.util.DocumentIds.isSafe(value)) { "Mã tài liệu không hợp lệ" }
                                     }
                                     if(table=="custom_fonts" && column=="file_name") {
                                         val source=File(newRoot,"custom_fonts/$value").canonicalFile

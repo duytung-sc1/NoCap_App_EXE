@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Sessions and server entitlement snapshots must be re-established on a new device. -->
+    <exclude domain="sharedpref" path="cloud_auth.xml" />
+    <exclude domain="sharedpref" path="entitlements-v1.xml" />
+</full-backup-content>
