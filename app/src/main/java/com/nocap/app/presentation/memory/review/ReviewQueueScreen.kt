@@ -1,4 +1,8 @@
+
 package com.nocap.app.presentation.memory.review
+
+import com.nocap.app.core.localization.Text
+import com.nocap.app.core.localization.localize
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -44,7 +48,7 @@ fun ReviewQueueScreen(
                 title = { Text("Ôn tập ngắt quãng") },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Quay lại")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = localize("Quay lại"))
                     }
                 }
             )

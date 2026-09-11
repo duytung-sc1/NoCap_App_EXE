@@ -1,4 +1,8 @@
+
 package com.nocap.app.presentation.memory.search
+
+import com.nocap.app.core.localization.Text
+import com.nocap.app.core.localization.localize
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -59,7 +63,7 @@ fun KnowledgeSearchScreen(
                         trailingIcon = {
                             if (uiState.query.isNotEmpty()) {
                                 IconButton(onClick = { viewModel.clearQuery() }) {
-                                    Icon(Icons.Default.Clear, contentDescription = "Xóa tìm kiếm")
+                                    Icon(Icons.Default.Clear, contentDescription = localize("Xóa tìm kiếm"))
                                 }
                             }
                         },
@@ -70,7 +74,7 @@ fun KnowledgeSearchScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Quay lại")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = localize("Quay lại"))
                     }
                 }
             )

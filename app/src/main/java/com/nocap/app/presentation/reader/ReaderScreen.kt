@@ -79,7 +79,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
-import androidx.compose.material3.Text
+import com.nocap.app.core.localization.Text
+import com.nocap.app.core.localization.localize
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
@@ -412,9 +413,9 @@ fun ReaderScreen(
         if (uri != null) {
             viewModel.importCustomFont(uri) { result ->
                 result.onSuccess { font ->
-                    Toast.makeText(context, "Đã thêm phông chữ: " + font.fontFamily, Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, com.nocap.app.core.localization.AppLanguageManager.translate(context, "Đã thêm phông chữ: ") + font.fontFamily, Toast.LENGTH_SHORT).show()
                 }.onFailure { err ->
-                    Toast.makeText(context, err.message ?: "Không thể thêm phông chữ", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, com.nocap.app.core.localization.AppLanguageManager.translate(context, err.message ?: "Không thể thêm phông chữ"), Toast.LENGTH_LONG).show()
                 }
             }
         }
@@ -444,7 +445,7 @@ fun ReaderScreen(
                         IconButton(onClick = handleBack) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Quay lại",
+                                contentDescription = localize("Quay lại"),
                                 tint = barContentColor
                             )
                         }
@@ -464,15 +465,15 @@ fun ReaderScreen(
                                     }
                                 }
                             }) {
-                                Icon(Icons.Default.Edit, contentDescription = "Trích xuất văn bản", tint = barContentColor)
+                                Icon(Icons.Default.Edit, contentDescription = localize("Trích xuất văn bản"), tint = barContentColor)
                             }
                         }
                         IconButton(onClick = { showSearchSheet = true }) {
-                            Icon(Icons.Default.Search, contentDescription = "Tìm kiếm trong sách", tint = barContentColor)
+                            Icon(Icons.Default.Search, contentDescription = localize("Tìm kiếm trong sách"), tint = barContentColor)
                         }
 
                         IconButton(onClick = { showAnnotationsSheet = true }) {
-                            Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Đánh dấu & ghi chú", tint = barContentColor)
+                            Icon(Icons.AutoMirrored.Filled.List, contentDescription = localize("Đánh dấu & ghi chú"), tint = barContentColor)
                         }
                         IconButton(onClick = viewModel::toggleBookmark) {
                             Icon(
@@ -482,7 +483,7 @@ fun ReaderScreen(
                             )
                         }
                         IconButton(onClick = { showSettingsSheet = true }) {
-                            Icon(Icons.Default.Settings, contentDescription = "Cài đặt hiển thị", tint = barContentColor)
+                            Icon(Icons.Default.Settings, contentDescription = localize("Cài đặt hiển thị"), tint = barContentColor)
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = barBackground)
@@ -573,7 +574,7 @@ fun ReaderScreen(
                             onCopyQuote = { quote ->
                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                 clipboard.setPrimaryClip(ClipData.newPlainText("Trích dẫn NoCap", quote))
-                                Toast.makeText(context, "Đã sao chép trích dẫn", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, com.nocap.app.core.localization.AppLanguageManager.translate(context, "Đã sao chép trích dẫn"), Toast.LENGTH_SHORT).show()
                             },
                             onShareQuote = { quote ->
                                 val sendIntent = Intent().apply {
@@ -1097,7 +1098,7 @@ fun InBookSearchSheetContent(
                 trailingIcon = {
                     if (query.isNotBlank()) {
                         IconButton(onClick = onClearQuery) {
-                            Icon(Icons.Default.Clear, contentDescription = "Xóa")
+                            Icon(Icons.Default.Clear, contentDescription = localize("Xóa"))
                         }
                     }
                 },
@@ -1243,7 +1244,7 @@ fun AnnotationsBottomSheetContent(
                                     Text(dateFormat.format(Date(b.createdAt)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
                                 }
                                 IconButton(onClick = { onDeleteBookmark(b.id) }) {
-                                    Icon(Icons.Default.Delete, contentDescription = "Xóa", tint = MaterialTheme.colorScheme.error)
+                                    Icon(Icons.Default.Delete, contentDescription = localize("Xóa"), tint = MaterialTheme.colorScheme.error)
                                 }
                             }
                             HorizontalDivider()
@@ -1305,13 +1306,13 @@ fun AnnotationsBottomSheetContent(
                                     Text(dateFormat.format(Date(h.createdAt)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
                                 }
                                 IconButton(onClick = { onShareHighlight(h) }) {
-                                    Icon(Icons.Default.Share, contentDescription = "Chia sẻ")
+                                    Icon(Icons.Default.Share, contentDescription = localize("Chia sẻ"))
                                 }
                                 IconButton(onClick = { onEditHighlight(h) }) {
-                                    Icon(Icons.Default.Edit, contentDescription = "Sửa")
+                                    Icon(Icons.Default.Edit, contentDescription = localize("Sửa"))
                                 }
                                 IconButton(onClick = { onDeleteHighlight(h.id) }) {
-                                    Icon(Icons.Default.Delete, contentDescription = "Xóa", tint = MaterialTheme.colorScheme.error)
+                                    Icon(Icons.Default.Delete, contentDescription = localize("Xóa"), tint = MaterialTheme.colorScheme.error)
                                 }
                             }
                             HorizontalDivider()
@@ -1370,10 +1371,10 @@ fun AnnotationsBottomSheetContent(
                                         Text(dateFormat.format(Date(h.updatedAt)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
                                         Row {
                                             IconButton(onClick = { onEditHighlight(h) }, modifier = Modifier.size(32.dp)) {
-                                                Icon(Icons.Default.Edit, contentDescription = "Sửa", modifier = Modifier.size(18.dp))
+                                                Icon(Icons.Default.Edit, contentDescription = localize("Sửa"), modifier = Modifier.size(18.dp))
                                             }
                                             IconButton(onClick = { onDeleteHighlight(h.id) }, modifier = Modifier.size(32.dp)) {
-                                                Icon(Icons.Default.Delete, contentDescription = "Xóa", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+                                                Icon(Icons.Default.Delete, contentDescription = localize("Xóa"), tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
                                             }
                                         }
                                     }

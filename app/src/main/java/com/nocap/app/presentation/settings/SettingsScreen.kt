@@ -2,6 +2,9 @@ package com.nocap.app.presentation.settings
 
 import androidx.compose.foundation.layout.widthIn
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.content.pm.PackageInfo
 import android.os.Build
 import androidx.compose.foundation.background
@@ -43,7 +46,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
+import com.nocap.app.core.localization.Text
+import com.nocap.app.core.localization.localize
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -68,6 +72,8 @@ import coil.compose.AsyncImage
 import com.nocap.app.core.datastore.ReaderFontFamily
 import com.nocap.app.core.datastore.ReaderTextAlignment
 import com.nocap.app.core.datastore.ReaderTheme
+import com.nocap.app.core.localization.AppLanguage
+import com.nocap.app.core.localization.AppLanguageManager
 import com.nocap.app.domain.model.AuthState
 import com.nocap.app.presentation.auth.EditProfileDialog
 import com.nocap.app.presentation.auth.ForgotPasswordDialog
@@ -89,6 +95,7 @@ fun SettingsScreen(
     val cloudBusy by viewModel.cloudBusy.collectAsStateWithLifecycle()
     val cloudMessage by viewModel.cloudMessage.collectAsStateWithLifecycle()
     var cloudAction by remember { mutableStateOf<String?>(null) }
+    val selectedLanguage = remember(context) { AppLanguageManager.selected(context) }
 
     if (cloudAction != null) {
         AlertDialog(onDismissRequest = { cloudAction = null },
@@ -147,6 +154,52 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 12.dp)
         ) {
+            Text(
+                text = "Ngôn ngữ",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Ngôn ngữ ứng dụng",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "Thay đổi sẽ áp dụng ngay cho toàn bộ giao diện.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    AppLanguage.entries.forEach { language ->
+                        FilterChip(
+                            selected = selectedLanguage == language,
+                            onClick = {
+                                if (selectedLanguage != language && AppLanguageManager.select(context, language)) {
+                                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                                        context.findActivity()?.recreate()
+                                    }
+                                }
+                            },
+                            label = { Text(language.nativeName) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(20.dp))
+
             PlanCard()
             // SECTION 0: TÀI KHOẢN (ACCOUNT / AUTH - M8B)
             if (authState is AuthState.Authenticated) {
@@ -389,7 +442,7 @@ fun SettingsScreen(
                                 if (!effectivePhotoUrl.isNullOrBlank()) {
                                     AsyncImage(
                                         model = effectivePhotoUrl,
-                                        contentDescription = "Ảnh đại diện",
+                                        contentDescription = localize("Ảnh đại diện"),
                                         modifier = Modifier
                                             .size(52.dp)
                                             .clip(CircleShape)
@@ -720,7 +773,7 @@ fun SettingsScreen(
                     }
                     Icon(
                         imageVector = Icons.Default.Refresh,
-                        contentDescription = "Khôi phục",
+                        contentDescription = localize("Khôi phục"),
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(start = 12.dp)
                     )
@@ -939,4 +992,10 @@ fun SettingsThemeCard(
             style = MaterialTheme.typography.bodyMedium
         )
     }
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }

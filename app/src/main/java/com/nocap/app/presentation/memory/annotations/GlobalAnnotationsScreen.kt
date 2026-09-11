@@ -1,4 +1,8 @@
+
 package com.nocap.app.presentation.memory.annotations
+
+import com.nocap.app.core.localization.Text
+import com.nocap.app.core.localization.localize
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -42,7 +46,7 @@ fun GlobalAnnotationsScreen(
                 title = { Text("Toàn bộ Ghi chú & Đoạn trích") },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Quay lại")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = localize("Quay lại"))
                     }
                 }
             )
@@ -67,7 +71,7 @@ fun GlobalAnnotationsScreen(
                 trailingIcon = {
                     if (uiState.searchQuery.isNotEmpty()) {
                         IconButton(onClick = { viewModel.onSearchQueryChange("") }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Xóa")
+                            Icon(Icons.Default.Clear, contentDescription = localize("Xóa"))
                         }
                     }
                 }

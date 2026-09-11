@@ -1,4 +1,8 @@
+
 package com.nocap.app.presentation.memory.stats
+
+import com.nocap.app.core.localization.Text
+import com.nocap.app.core.localization.localize
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -38,7 +42,7 @@ fun ReadingStatsScreen(
                 title = { Text("Thống kê & Thói quen đọc") },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Quay lại")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = localize("Quay lại"))
                     }
                 }
             )

@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nocap.app.core.designsystem.EbookAppTheme
+import com.nocap.app.core.localization.AppLanguageManager
 import com.nocap.app.core.navigation.AppNavHost
 import com.nocap.app.domain.model.PublicationSource
 import android.view.KeyEvent
@@ -21,9 +22,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 class MainActivity : FragmentActivity() {
 
     override fun attachBaseContext(newBase: android.content.Context) {
-        val configuration = android.content.res.Configuration(newBase.resources.configuration)
-        configuration.setLocale(java.util.Locale.forLanguageTag("vi-VN"))
-        super.attachBaseContext(newBase.createConfigurationContext(configuration))
+        super.attachBaseContext(AppLanguageManager.wrap(newBase))
     }
 
 

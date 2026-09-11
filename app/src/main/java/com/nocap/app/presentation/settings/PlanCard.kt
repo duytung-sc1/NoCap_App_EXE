@@ -1,5 +1,7 @@
 package com.nocap.app.presentation.settings
 
+import com.nocap.app.core.localization.Text
+
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper

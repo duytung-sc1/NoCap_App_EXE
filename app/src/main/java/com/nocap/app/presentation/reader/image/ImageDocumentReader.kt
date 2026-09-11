@@ -16,7 +16,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import com.nocap.app.core.localization.Text
+import com.nocap.app.core.localization.localize
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -163,7 +164,7 @@ fun ImageDocumentReader(
                     IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Trở về",
+                            contentDescription = localize("Trở về"),
                             tint = Color.White
                         )
                     }
@@ -177,7 +178,7 @@ fun ImageDocumentReader(
                     }) {
                         Icon(
                             imageVector = Icons.Default.CheckCircle,
-                            contentDescription = "Đánh dấu hoàn thành",
+                            contentDescription = localize("Đánh dấu hoàn thành"),
                             tint = if (book.readingStatus == DocumentReadingStatus.COMPLETED) MaterialTheme.colorScheme.primary else Color.White
                         )
                     }

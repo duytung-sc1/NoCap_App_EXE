@@ -27,7 +27,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import com.nocap.app.core.localization.Text
+import com.nocap.app.core.localization.localize
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -264,7 +265,7 @@ fun ImageArchiveReader(
                     if (pageFile != null) {
                         AsyncImage(
                             model = pageFile,
-                            contentDescription = "Trang ${pageIdx + 1}",
+                            contentDescription = localize("Trang ${pageIdx + 1}"),
                             contentScale = ContentScale.Fit,
                             modifier = Modifier
                                 .fillMaxSize()
@@ -298,7 +299,7 @@ fun ImageArchiveReader(
                     },
                     navigationIcon = {
                         IconButton(onClick = onBackClick) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Trở về", tint = Color.White)
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = localize("Trở về"), tint = Color.White)
                         }
                     },
                     actions = {
@@ -328,7 +329,7 @@ fun ImageArchiveReader(
                         }) {
                             Icon(
                                 imageVector = if (isBookmarked) AppIcons.Bookmark else AppIcons.BookmarkBorder,
-                                contentDescription = "Đánh dấu trang",
+                                contentDescription = localize("Đánh dấu trang"),
                                 tint = if (isBookmarked) MaterialTheme.colorScheme.primary else Color.White
                             )
                         }
@@ -365,7 +366,7 @@ fun ImageArchiveReader(
                             },
                             enabled = pagerState.currentPage > 0
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Trang trước", tint = Color.White)
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = localize("Trang trước"), tint = Color.White)
                         }
 
                         Text(
@@ -384,7 +385,7 @@ fun ImageArchiveReader(
                             },
                             enabled = pagerState.currentPage < pages.size - 1
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Trang sau", tint = Color.White)
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = localize("Trang sau"), tint = Color.White)
                         }
                     }
                 }

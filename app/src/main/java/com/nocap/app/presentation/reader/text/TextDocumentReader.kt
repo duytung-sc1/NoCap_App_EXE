@@ -43,7 +43,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import com.nocap.app.core.localization.Text
+import com.nocap.app.core.localization.localize
 import androidx.compose.material3.TextButton
 
 import androidx.compose.material3.TextField
@@ -370,13 +371,13 @@ fun TextDocumentReader(
                     },
                     navigationIcon = {
                         IconButton(onClick = onBackClick) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Trở về")
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = localize("Trở về"))
                         }
                     },
                     actions = {
                         // Search
                         IconButton(onClick = { showSearchSheet = !showSearchSheet }) {
-                            Icon(Icons.Default.Search, contentDescription = "Tìm kiếm")
+                            Icon(Icons.Default.Search, contentDescription = localize("Tìm kiếm"))
                         }
                         // Bookmark
                         IconButton(onClick = {
@@ -398,13 +399,13 @@ fun TextDocumentReader(
                         }) {
                             Icon(
                                 imageVector = if (isBookmarked) AppIcons.Bookmark else AppIcons.BookmarkBorder,
-                                contentDescription = "Đánh dấu",
+                                contentDescription = localize("Đánh dấu"),
                                 tint = if (isBookmarked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                             )
                         }
                         // Settings
                         IconButton(onClick = { showSettingsSheet = true }) {
-                            Icon(Icons.Default.Settings, contentDescription = "Cài đặt")
+                            Icon(Icons.Default.Settings, contentDescription = localize("Cài đặt"))
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
@@ -466,7 +467,7 @@ fun TextDocumentReader(
                                 searchQuery = ""
                                 searchMatches = emptyList()
                             }) {
-                                Icon(Icons.Default.Close, contentDescription = "Đóng")
+                                Icon(Icons.Default.Close, contentDescription = localize("Đóng"))
                             }
                         }
 
@@ -490,7 +491,7 @@ fun TextDocumentReader(
                                         },
                                         enabled = currentMatchIndex > 0
                                     ) {
-                                        Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Trước")
+                                        Icon(Icons.Default.KeyboardArrowUp, contentDescription = localize("Trước"))
                                     }
                                     IconButton(
                                         onClick = {
@@ -501,7 +502,7 @@ fun TextDocumentReader(
                                         },
                                         enabled = currentMatchIndex < searchMatches.size - 1
                                     ) {
-                                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Sau")
+                                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = localize("Sau"))
                                     }
                                 }
                             }

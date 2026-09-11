@@ -1,5 +1,8 @@
 package com.nocap.app.presentation.library
 
+import com.nocap.app.core.localization.Text
+import com.nocap.app.core.localization.localize
+
 import android.content.Context
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -108,10 +111,17 @@ fun LibraryScreen(
         viewModel.events.collect { event ->
             when (event) {
                 is LibraryEvent.ImportSuccess -> {
-                    snackbarHostState.showSnackbar("Đã thêm \"${event.bookTitle}\" vào thư viện!")
+                    snackbarHostState.showSnackbar(
+                        com.nocap.app.core.localization.AppLanguageManager.translate(
+                            context,
+                            "Đã thêm \"${event.bookTitle}\" vào thư viện!"
+                        )
+                    )
                 }
                 is LibraryEvent.ShowMessage -> {
-                    snackbarHostState.showSnackbar(event.message)
+                    snackbarHostState.showSnackbar(
+                        com.nocap.app.core.localization.AppLanguageManager.translate(context, event.message)
+                    )
                 }
                 is LibraryEvent.DuplicateFound -> {
                     duplicateBookDialog = event.bookId to event.title
@@ -133,7 +143,7 @@ fun LibraryScreen(
                     },
                     navigationIcon = {
                         IconButton(onClick = viewModel::exitSelectionMode) {
-                            Icon(Icons.Default.Close, contentDescription = "Đóng chọn")
+                            Icon(Icons.Default.Close, contentDescription = localize("Đóng chọn"))
                         }
                     },
                     actions = {
@@ -161,7 +171,7 @@ fun LibraryScreen(
                                     newCollectionName = ""
                                     showCreateCollectionDialog = true
                                 }) {
-                                    Icon(Icons.Default.Add, contentDescription = "Tạo bộ sưu tập")
+                                    Icon(Icons.Default.Add, contentDescription = localize("Tạo bộ sưu tập"))
                                 }
                             }
                             LibraryTab.TAGS -> {
@@ -169,12 +179,12 @@ fun LibraryScreen(
                                     newTagName = ""
                                     showCreateTagDialog = true
                                 }) {
-                                    Icon(Icons.Default.Add, contentDescription = "Tạo thẻ")
+                                    Icon(Icons.Default.Add, contentDescription = localize("Tạo thẻ"))
                                 }
                             }
                             else -> {
                                 IconButton(onClick = { showImportSourceSheet = true }) {
-                                    Icon(Icons.Default.Add, contentDescription = "Thêm tài liệu")
+                                    Icon(Icons.Default.Add, contentDescription = localize("Thêm tài liệu"))
                                 }
                             }
                         }
@@ -201,31 +211,31 @@ fun LibraryScreen(
                     ) {
                         IconButton(onClick = { showBulkTagDialog = true }) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(AppIcons.Tag, contentDescription = "Gắn thẻ", modifier = Modifier.size(20.dp))
+                                Icon(AppIcons.Tag, contentDescription = localize("Gắn thẻ"), modifier = Modifier.size(20.dp))
                                 Text("Thẻ", fontSize = 10.sp)
                             }
                         }
                         IconButton(onClick = { showBulkCollectionDialog = true }) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Bộ sưu tập", modifier = Modifier.size(20.dp))
+                                Icon(Icons.AutoMirrored.Filled.List, contentDescription = localize("Bộ sưu tập"), modifier = Modifier.size(20.dp))
                                 Text("Bộ sưu tập", fontSize = 10.sp)
                             }
                         }
                         IconButton(onClick = { showBulkStatusDialog = true }) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(Icons.Default.CheckCircle, contentDescription = "Trạng thái", modifier = Modifier.size(20.dp))
+                                Icon(Icons.Default.CheckCircle, contentDescription = localize("Trạng thái"), modifier = Modifier.size(20.dp))
                                 Text("Trạng thái", fontSize = 10.sp)
                             }
                         }
                         IconButton(onClick = { viewModel.bulkSetPinned(true) }) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(AppIcons.Pin, contentDescription = "Ghim", modifier = Modifier.size(20.dp))
+                                Icon(AppIcons.Pin, contentDescription = localize("Ghim"), modifier = Modifier.size(20.dp))
                                 Text("Ghim", fontSize = 10.sp)
                             }
                         }
                         IconButton(onClick = { viewModel.bulkSetArchived(true) }) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(Icons.Default.Clear, contentDescription = "Lưu trữ", modifier = Modifier.size(20.dp))
+                                Icon(Icons.Default.Clear, contentDescription = localize("Lưu trữ"), modifier = Modifier.size(20.dp))
                                 Text("Lưu trữ", fontSize = 10.sp)
                             }
                         }
@@ -322,14 +332,14 @@ fun LibraryScreen(
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Default.Search,
-                                contentDescription = "Tìm kiếm",
+                                contentDescription = localize("Tìm kiếm"),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         },
                         trailingIcon = {
                             if (uiState.searchQuery.isNotBlank()) {
                                 IconButton(onClick = { viewModel.onSearchQueryChange("") }) {
-                                    Icon(Icons.Default.Clear, contentDescription = "Xóa tìm kiếm")
+                                    Icon(Icons.Default.Clear, contentDescription = localize("Xóa tìm kiếm"))
                                 }
                             }
                         },
@@ -584,10 +594,10 @@ fun LibraryScreen(
                             collectionToRename = col
                             renameCollectionName = col.name
                         }) {
-                            Icon(Icons.Default.Edit, contentDescription = "Đổi tên")
+                            Icon(Icons.Default.Edit, contentDescription = localize("Đổi tên"))
                         }
                         IconButton(onClick = { collectionToDelete = col }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Xóa", tint = MaterialTheme.colorScheme.error)
+                            Icon(Icons.Default.Delete, contentDescription = localize("Xóa"), tint = MaterialTheme.colorScheme.error)
                         }
                     }
                 }
@@ -648,7 +658,7 @@ fun LibraryScreen(
                                 }) {
                                     Icon(
                                         imageVector = Icons.Default.Clear,
-                                        contentDescription = "Xóa khỏi bộ sưu tập",
+                                        contentDescription = localize("Xóa khỏi bộ sưu tập"),
                                         tint = MaterialTheme.colorScheme.error
                                     )
                                 }
@@ -699,10 +709,10 @@ fun LibraryScreen(
                             tagToRename = tagWithCount
                             renameTagName = tagWithCount.name
                         }) {
-                            Icon(Icons.Default.Edit, contentDescription = "Đổi tên")
+                            Icon(Icons.Default.Edit, contentDescription = localize("Đổi tên"))
                         }
                         IconButton(onClick = { tagToDelete = tagWithCount }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Xóa", tint = MaterialTheme.colorScheme.error)
+                            Icon(Icons.Default.Delete, contentDescription = localize("Xóa"), tint = MaterialTheme.colorScheme.error)
                         }
                     }
                 }
@@ -889,7 +899,7 @@ fun LibraryScreen(
                             },
                             enabled = quickTagName.isNotBlank()
                         ) {
-                            Icon(Icons.Default.Add, contentDescription = "Thêm")
+                            Icon(Icons.Default.Add, contentDescription = localize("Thêm"))
                         }
                     }
 
@@ -1658,7 +1668,7 @@ private fun SmartViewsAndSortRow(
             IconButton(onClick = { showSortMenu = true }) {
                 Icon(
                     imageVector = AppIcons.Sort,
-                    contentDescription = "Sắp xếp",
+                    contentDescription = localize("Sắp xếp"),
                     tint = MaterialTheme.colorScheme.primary
                 )
             }
@@ -1766,7 +1776,7 @@ private fun DocumentCardItem(
                         if (book.isPinned) {
                             Icon(
                                 imageVector = AppIcons.Pin,
-                                contentDescription = "Đã ghim",
+                                contentDescription = localize("Đã ghim"),
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(16.dp).padding(end = 4.dp)
                             )
@@ -1777,7 +1787,7 @@ private fun DocumentCardItem(
                         ) {
                             Icon(
                                 imageVector = if (libraryBook.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                                contentDescription = "Yêu thích",
+                                contentDescription = localize("Yêu thích"),
                                 tint = if (libraryBook.isFavorite) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(18.dp)
                             )
@@ -1948,7 +1958,7 @@ private fun DocumentCardItem(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.MoreVert,
-                                    contentDescription = "Tùy chọn",
+                                    contentDescription = localize("Tùy chọn"),
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
@@ -2230,7 +2240,7 @@ private fun CollectionsView(
                         }
                         Box {
                             IconButton(onClick = { showColMenu = true }) {
-                                Icon(Icons.Default.MoreVert, contentDescription = "Tùy chọn")
+                                Icon(Icons.Default.MoreVert, contentDescription = localize("Tùy chọn"))
                             }
                             DropdownMenu(
                                 expanded = showColMenu,
@@ -2360,7 +2370,7 @@ private fun TagsView(
                         }
                         Box {
                             IconButton(onClick = { showTagMenu = true }) {
-                                Icon(Icons.Default.MoreVert, contentDescription = "Tùy chọn")
+                                Icon(Icons.Default.MoreVert, contentDescription = localize("Tùy chọn"))
                             }
                             DropdownMenu(
                                 expanded = showTagMenu,

@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.collect
 class EbookApplication : Application() {
     override fun onCreate() {
         super.onCreate()
-        java.util.Locale.setDefault(java.util.Locale.forLanguageTag("vi-VN"))
+        com.nocap.app.core.localization.AppLanguageManager.applyDefault(this)
         com.nocap.app.data.catalog.CloudCatalog.start(this)
         com.nocap.app.data.auth.CloudAuthRepository.getInstance(this)
         com.nocap.app.data.billing.EntitlementRepository.get(this)

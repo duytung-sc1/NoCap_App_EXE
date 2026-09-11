@@ -3,7 +3,8 @@ package com.nocap.app.core.navigation
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Text
+import com.nocap.app.core.localization.Text
+import com.nocap.app.core.localization.localize
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavController
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -32,7 +33,7 @@ fun BottomNavBar(navController: NavController) {
                 },
                 icon = {
                     screen.icon?.let {
-                        Icon(imageVector = it, contentDescription = screen.title)
+                        Icon(imageVector = it, contentDescription = screen.title?.let { title -> localize(title) })
                     }
                 },
                 label = {

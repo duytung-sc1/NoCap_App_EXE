@@ -1,4 +1,7 @@
+
 package com.nocap.app.presentation.components
+
+import com.nocap.app.core.localization.Text
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState

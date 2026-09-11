@@ -1,4 +1,8 @@
+
 package com.nocap.app.presentation.memory
+
+import com.nocap.app.core.localization.Text
+import com.nocap.app.core.localization.localize
 
 import android.net.Uri
 import android.widget.Toast
@@ -64,13 +68,13 @@ fun ReadingMemoryScreen(
                     val success = viewModel.exportAllKnowledge(outputStream)
                     isExporting = false
                     if (success) {
-                        Toast.makeText(context, "Đã xuất dữ liệu ghi chú thành công!", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, com.nocap.app.core.localization.AppLanguageManager.translate(context, "Đã xuất dữ liệu ghi chú thành công!"), Toast.LENGTH_SHORT).show()
                     } else {
-                        Toast.makeText(context, "Lỗi khi xuất tệp Markdown", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, com.nocap.app.core.localization.AppLanguageManager.translate(context, "Lỗi khi xuất tệp Markdown"), Toast.LENGTH_SHORT).show()
                     }
                 } else {
                     isExporting = false
-                    Toast.makeText(context, "Không thể mở tệp để ghi", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, com.nocap.app.core.localization.AppLanguageManager.translate(context, "Không thể mở tệp để ghi"), Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -87,10 +91,10 @@ fun ReadingMemoryScreen(
                 },
                 actions = {
                     IconButton(onClick = onNavigateToSearch) {
-                        Icon(Icons.Default.Search, contentDescription = "Tìm kiếm tri thức")
+                        Icon(Icons.Default.Search, contentDescription = localize("Tìm kiếm tri thức"))
                     }
                     IconButton(onClick = onNavigateToStats) {
-                        Icon(Icons.Default.Info, contentDescription = "Thống kê đọc")
+                        Icon(Icons.Default.Info, contentDescription = localize("Thống kê đọc"))
                     }
                     IconButton(
                         onClick = {
@@ -102,7 +106,7 @@ fun ReadingMemoryScreen(
                         if (isExporting) {
                             CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                         } else {
-                            Icon(Icons.Default.Share, contentDescription = "Xuất Markdown")
+                            Icon(Icons.Default.Share, contentDescription = localize("Xuất Markdown"))
                         }
                     }
                 }
@@ -392,7 +396,7 @@ fun HighlightCard(
                 ) {
                     Icon(
                         imageVector = if (item.isUnderReview) Icons.Default.CheckCircle else Icons.Default.Add,
-                        contentDescription = "Ôn tập",
+                        contentDescription = localize("Ôn tập"),
                         tint = if (item.isUnderReview) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.outline,
                         modifier = Modifier.size(18.dp)
                     )
