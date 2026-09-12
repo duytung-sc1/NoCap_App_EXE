@@ -1,7 +1,7 @@
 package com.nocap.app.core.localization
 
 import androidx.compose.material3.LocalTextStyle
-import com.nocap.app.core.localization.Text as MaterialText
+import androidx.compose.material3.Text as MaterialText
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -78,6 +78,6 @@ fun Text(
         fontStyle = fontStyle, fontWeight = fontWeight, fontFamily = fontFamily,
         letterSpacing = letterSpacing, textDecoration = textDecoration, textAlign = textAlign,
         lineHeight = lineHeight, overflow = overflow, softWrap = softWrap, maxLines = maxLines,
-        minLines = minLines, onTextLayout = onTextLayout, style = style
+        minLines = minLines, onTextLayout = onTextLayout ?: {}, style = style
     )
 }

@@ -1,6 +1,10 @@
 package com.nocap.app.presentation.settings
 
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.Surface
+import androidx.compose.ui.text.style.TextOverflow
+
 
 import android.app.Activity
 import android.content.Context
@@ -154,75 +158,9 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 12.dp)
         ) {
-            Text(
-                text = "Ngôn ngữ",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                ),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "Ngôn ngữ ứng dụng",
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = "Thay đổi sẽ áp dụng ngay cho toàn bộ giao diện.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    AppLanguage.entries.forEach { language ->
-                        FilterChip(
-                            selected = selectedLanguage == language,
-                            onClick = {
-                                if (selectedLanguage != language && AppLanguageManager.select(context, language)) {
-                                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-                                        context.findActivity()?.recreate()
-                                    }
-                                }
-                            },
-                            label = { Text(language.nativeName) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp)
-                        )
-                    }
-                }
-            }
-            Spacer(modifier = Modifier.height(20.dp))
-
-            PlanCard()
-            // SECTION 0: TÀI KHOẢN (ACCOUNT / AUTH - M8B)
-            if (authState is AuthState.Authenticated) {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text("Đồng bộ nhiều thiết bị", fontWeight = FontWeight.Bold)
-                        val syncStatus by com.nocap.app.data.sync.SyncScheduler.status.collectAsStateWithLifecycle()
-                        val syncContext = androidx.compose.ui.platform.LocalContext.current
-                        Text(syncStatus)
-                        Button(onClick = { com.nocap.app.data.sync.SyncScheduler.now(syncContext) }) { Text("Đồng bộ ngay") }
-                        Text("Bản sao lưu thư viện", fontWeight = FontWeight.Bold)
-                        Text("Sao lưu và khôi phục sách, ghi chú, tiến độ, thẻ và bộ sưu tập.")
-                        if (cloudBusy) CircularProgressIndicator(Modifier.padding(8.dp))
-                        cloudMessage?.let { Text(it, modifier = Modifier.padding(vertical = 8.dp)) }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(enabled = !cloudBusy, onClick = { cloudAction = "backup" }) { Text("Sao lưu") }
-                            OutlinedButton(enabled = !cloudBusy, onClick = { cloudAction = "restore" }) { Text("Khôi phục") }
-                        }
-                        TextButton(enabled = !cloudBusy, onClick = { cloudAction = "delete" }) { Text("Xóa bản sao lưu") }
-                    }
-                }
-                Spacer(Modifier.height(16.dp))
-            }
+            // ==========================================
+            // SECTION 1: TÀI KHOẢN (ACCOUNT)
+            // ==========================================
             Text(
                 text = "Tài khoản",
                 style = MaterialTheme.typography.titleMedium,
@@ -271,7 +209,7 @@ fun SettingsScreen(
                                         fontWeight = FontWeight.Bold
                                     )
                                     Text(
-                                        text = "Đăng nhập để sao lưu và khôi phục thư viện của bạn",
+                                        text = "Đăng nhập để đồng bộ và sao lưu thư viện giữa các thiết bị",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -287,14 +225,14 @@ fun SettingsScreen(
                                 Button(
                                     onClick = { viewModel.openLogin() },
                                     shape = RoundedCornerShape(10.dp),
-                                    modifier = Modifier.weight(1f)
+                                    modifier = Modifier.weight(1f).heightIn(min = 48.dp)
                                 ) {
                                     Text("Đăng nhập")
                                 }
                                 OutlinedButton(
                                     onClick = { viewModel.openRegister() },
                                     shape = RoundedCornerShape(10.dp),
-                                    modifier = Modifier.weight(1f)
+                                    modifier = Modifier.weight(1f).heightIn(min = 48.dp)
                                 ) {
                                     Text("Tạo tài khoản")
                                 }
@@ -319,7 +257,7 @@ fun SettingsScreen(
                                     modifier = Modifier.size(36.dp)
                                 )
                                 Spacer(modifier = Modifier.width(12.dp))
-                                Column {
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         text = "Yêu cầu xác thực Email",
                                         style = MaterialTheme.typography.titleSmall,
@@ -328,7 +266,9 @@ fun SettingsScreen(
                                     )
                                     Text(
                                         text = "Kiểm tra hộp thư ${user.email.orEmpty()} hoặc nhấn Gửi lại link.",
-                                        style = MaterialTheme.typography.bodySmall
+                                        style = MaterialTheme.typography.bodySmall,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
                             }
@@ -361,7 +301,7 @@ fun SettingsScreen(
                                     onClick = { viewModel.reloadVerification() },
                                     enabled = !authUiState.isLoading,
                                     shape = RoundedCornerShape(10.dp),
-                                    modifier = Modifier.weight(1f)
+                                    modifier = Modifier.weight(1f).heightIn(min = 48.dp)
                                 ) {
                                     Text("Đã xác thực", fontSize = 12.sp)
                                 }
@@ -369,7 +309,7 @@ fun SettingsScreen(
                                     onClick = { viewModel.sendEmailVerification() },
                                     enabled = !authUiState.isLoading,
                                     shape = RoundedCornerShape(10.dp),
-                                    modifier = Modifier.weight(1f)
+                                    modifier = Modifier.weight(1f).heightIn(min = 48.dp)
                                 ) {
                                     Text("Gửi lại link", fontSize = 12.sp)
                                 }
@@ -398,7 +338,6 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            // Server unavailable banner
                             if (authUiState.isServerUnavailable) {
                                 Card(
                                     shape = RoundedCornerShape(10.dp),
@@ -444,13 +383,13 @@ fun SettingsScreen(
                                         model = effectivePhotoUrl,
                                         contentDescription = localize("Ảnh đại diện"),
                                         modifier = Modifier
-                                            .size(52.dp)
+                                            .size(48.dp)
                                             .clip(CircleShape)
                                     )
                                 } else {
                                     Box(
                                         modifier = Modifier
-                                            .size(52.dp)
+                                            .size(48.dp)
                                             .clip(CircleShape)
                                             .background(MaterialTheme.colorScheme.primaryContainer),
                                         contentAlignment = Alignment.Center
@@ -464,26 +403,30 @@ fun SettingsScreen(
                                     }
                                 }
 
-                                Spacer(modifier = Modifier.width(14.dp))
+                                Spacer(modifier = Modifier.width(12.dp))
 
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         text = effectiveDisplayName,
                                         style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                     Text(
                                         text = user.email.orEmpty(),
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
-                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Spacer(modifier = Modifier.height(2.dp))
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(
                                             imageVector = Icons.Default.CheckCircle,
                                             contentDescription = null,
                                             tint = Color(0xFF4CAF50),
-                                            modifier = Modifier.size(14.dp)
+                                            modifier = Modifier.size(13.dp)
                                         )
                                         Spacer(modifier = Modifier.width(4.dp))
                                         Text(
@@ -496,19 +439,26 @@ fun SettingsScreen(
                                 }
                             }
 
-                            Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(14.dp))
                             HorizontalDivider()
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            Text(
+                                text = "Dữ liệu trên máy được lưu riêng theo tài khoản. Đăng xuất sẽ chuyển về thư viện Khách.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
                             Spacer(modifier = Modifier.height(12.dp))
 
-                            Text("Đăng xuất chuyển sang thư viện Khách riêng biệt. Dữ liệu tài khoản vẫn được giữ để dùng tiếp khi đăng nhập lại.",
-                                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Column(
+                            Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 OutlinedButton(
                                     onClick = { viewModel.openEditProfile() },
-                                    shape = RoundedCornerShape(10.dp)
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.weight(1f).heightIn(min = 48.dp)
                                 ) {
                                     Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
@@ -517,17 +467,19 @@ fun SettingsScreen(
 
                                 OutlinedButton(
                                     onClick = { viewModel.signOut() },
-                                    shape = RoundedCornerShape(10.dp)
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.weight(1f).heightIn(min = 48.dp)
                                 ) {
                                     Text("Đăng xuất")
                                 }
+                            }
 
-                                TextButton(
-                                    onClick = { viewModel.openDeleteAccount() },
-                                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                                ) {
-                                    Text("Xóa tài khoản")
-                                }
+                            TextButton(
+                                onClick = { viewModel.openDeleteAccount() },
+                                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                                modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 4.dp)
+                            ) {
+                                Text("Xóa tài khoản")
                             }
                         }
                     }
@@ -554,11 +506,159 @@ fun SettingsScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
-            // SECTION 1: TÙY CHỈNH ĐỌC SÁCH
+            // ==========================================
+            // SECTION 2: ĐỒNG BỘ & SAO LƯU (SYNC & BACKUP)
+            // ==========================================
             Text(
-                text = "Tùy chỉnh đọc sách",
+                text = "Đồng bộ & Sao lưu",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (authState is AuthState.Authenticated) {
+                        val syncStatus by com.nocap.app.data.sync.SyncScheduler.status.collectAsStateWithLifecycle()
+                        val syncContext = LocalContext.current
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                                Text(
+                                    text = "Đồng bộ nhiều thiết bị",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = syncStatus,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Button(
+                                onClick = { com.nocap.app.data.sync.SyncScheduler.now(syncContext) },
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.heightIn(min = 48.dp)
+                            ) {
+                                Text("Đồng bộ ngay")
+                            }
+                        }
+
+                        HorizontalDivider()
+
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                text = "Sao lưu & Khôi phục",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Lưu trữ toàn bộ sách, ghi chú, tiến độ đọc và bộ sưu tập lên tài khoản.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            if (cloudBusy) {
+                                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                                }
+                            }
+
+                            cloudMessage?.let {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        text = it,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        modifier = Modifier.padding(8.dp)
+                                    )
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Button(
+                                    enabled = !cloudBusy,
+                                    onClick = { cloudAction = "backup" },
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.weight(1f).heightIn(min = 48.dp)
+                                ) {
+                                    Text("Sao lưu")
+                                }
+                                OutlinedButton(
+                                    enabled = !cloudBusy,
+                                    onClick = { cloudAction = "restore" },
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.weight(1f).heightIn(min = 48.dp)
+                                ) {
+                                    Text("Khôi phục")
+                                }
+                            }
+
+                            TextButton(
+                                enabled = !cloudBusy,
+                                onClick = { cloudAction = "delete" },
+                                modifier = Modifier.align(Alignment.CenterHorizontally)
+                            ) {
+                                Text(
+                                    text = "Xóa bản sao lưu trên đám mây",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = "Đăng nhập tài khoản để tự động đồng bộ tiến độ đọc và sao lưu thư viện giữa các thiết bị.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // ==========================================
+            // SECTION 3: GÓI DỊCH VỤ (PLAN)
+            // ==========================================
+            Text(
+                text = "Gói dịch vụ",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            PlanCard()
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // ==========================================
+            // SECTION 4: TRẢI NGHIỆM ĐỌC (READING EXPERIENCE & LANGUAGE)
+            // ==========================================
+            Text(
+                text = "Trải nghiệm đọc",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
@@ -672,17 +772,20 @@ fun SettingsScreen(
                         FilterChip(
                             selected = preferences.fontFamily == ReaderFontFamily.SYSTEM_DEFAULT,
                             onClick = { viewModel.updateFontFamily(ReaderFontFamily.SYSTEM_DEFAULT) },
-                            label = { Text("Mặc định") }
+                            label = { Text("Mặc định") },
+                            modifier = Modifier.heightIn(min = 48.dp)
                         )
                         FilterChip(
                             selected = preferences.fontFamily == ReaderFontFamily.SERIF,
                             onClick = { viewModel.updateFontFamily(ReaderFontFamily.SERIF) },
-                            label = { Text("Có chân", fontFamily = FontFamily.Serif) }
+                            label = { Text("Có chân", fontFamily = FontFamily.Serif) },
+                            modifier = Modifier.heightIn(min = 48.dp)
                         )
                         FilterChip(
                             selected = preferences.fontFamily == ReaderFontFamily.SANS_SERIF,
                             onClick = { viewModel.updateFontFamily(ReaderFontFamily.SANS_SERIF) },
-                            label = { Text("Không chân", fontFamily = FontFamily.SansSerif) }
+                            label = { Text("Không chân", fontFamily = FontFamily.SansSerif) },
+                            modifier = Modifier.heightIn(min = 48.dp)
                         )
                     }
 
@@ -707,12 +810,14 @@ fun SettingsScreen(
                                 FilterChip(
                                     selected = preferences.textAlignment == ReaderTextAlignment.START,
                                     onClick = { viewModel.updateTextAlignment(ReaderTextAlignment.START) },
-                                    label = { Text("Trái") }
+                                    label = { Text("Trái") },
+                                    modifier = Modifier.heightIn(min = 48.dp)
                                 )
                                 FilterChip(
                                     selected = preferences.textAlignment == ReaderTextAlignment.JUSTIFY,
                                     onClick = { viewModel.updateTextAlignment(ReaderTextAlignment.JUSTIFY) },
-                                    label = { Text("Đều") }
+                                    label = { Text("Đều") },
+                                    modifier = Modifier.heightIn(min = 48.dp)
                                 )
                             }
                         }
@@ -730,59 +835,82 @@ fun SettingsScreen(
                             )
                         }
                     }
-                }
-            }
 
-            Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider()
+                    Spacer(modifier = Modifier.height(16.dp))
 
-            // SECTION 2: KHÔI PHỤC CÀI ĐẶT
-            Text(
-                text = "Quản lý cài đặt",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Spacer(modifier = Modifier.height(12.dp))
+                    // Language Selection
+                    Text(
+                        text = "Ngôn ngữ ứng dụng",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "Thay đổi sẽ áp dụng ngay cho toàn bộ giao diện.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        AppLanguage.entries.forEach { language ->
+                            FilterChip(
+                                selected = selectedLanguage == language,
+                                onClick = {
+                                    if (selectedLanguage != language && AppLanguageManager.select(context, language)) {
+                                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                                            context.findActivity()?.recreate()
+                                        }
+                                    }
+                                },
+                                label = { Text(language.nativeName) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                            )
+                        }
+                    }
 
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                ),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { showResetDialog = true }
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Khôi phục cài đặt đọc mặc định",
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            text = "Đặt lại cỡ chữ 100%, giao diện sáng và kiểu chữ mặc định",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                    Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider()
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Reset reading preferences
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showResetDialog = true }
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Khôi phục cài đặt đọc mặc định",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Đặt lại cỡ chữ 100%, giao diện sáng và kiểu chữ mặc định",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = localize("Khôi phục"),
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(start = 12.dp)
                         )
                     }
-                    Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = localize("Khôi phục"),
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(start = 12.dp)
-                    )
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
-            // SECTION 3: THÔNG TIN ỨNG DỤNG
+            // ==========================================
+            // SECTION 5: THÔNG TIN ỨNG DỤNG (APP INFORMATION)
+            // ==========================================
             Text(
                 text = "Thông tin ứng dụng",
                 style = MaterialTheme.typography.titleMedium,
@@ -798,10 +926,14 @@ fun SettingsScreen(
                 ),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = "Tên ứng dụng",
@@ -814,12 +946,11 @@ fun SettingsScreen(
                             fontWeight = FontWeight.SemiBold
                         )
                     }
-                    Spacer(modifier = Modifier.height(10.dp))
                     HorizontalDivider()
-                    Spacer(modifier = Modifier.height(10.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = "Phiên bản",
@@ -828,24 +959,6 @@ fun SettingsScreen(
                         )
                         Text(
                             text = "v$versionName",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(10.dp))
-                    HorizontalDivider()
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = "Bộ đọc sách",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = "Readium Kotlin 3.3.0",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold
                         )

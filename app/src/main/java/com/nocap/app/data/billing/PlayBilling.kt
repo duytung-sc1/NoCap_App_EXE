@@ -55,8 +55,8 @@ class PlayBilling(context: Context) : PurchasesUpdatedListener {
                         repository.restore()
                     })
                     if(repository.activeUser()==id) {
-                        if(!complete)message.value="Đã đối soát gói; một số giao dịch chưa khôi phục được hoặc thuộc tài khoản khác."
-                        else if(purchases.none { it.purchaseState==Purchase.PurchaseState.PENDING })message.value="Đã đối soát giao dịch với máy chủ"
+                        if(!complete)message.value="Đã kiểm tra gói; một số giao dịch chưa khôi phục được hoặc thuộc tài khoản khác."
+                        else if(purchases.none { it.purchaseState==Purchase.PurchaseState.PENDING })message.value="Đã xác nhận gói thành công"
                     }
                 }catch(e: Exception){if(e is CancellationException)throw e;if(repository.activeUser()==id)message.value="Chưa khôi phục được. Kiểm tra tài khoản NoCap rồi thử lại."}
             }

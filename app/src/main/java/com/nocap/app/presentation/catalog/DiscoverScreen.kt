@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -85,9 +86,13 @@ fun DiscoverScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
-                shape = RoundedCornerShape(28.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                tonalElevation = 0.dp
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                tonalElevation = 0.dp,
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                )
             ) {
                 TextField(
                     value = discoverState.searchQuery,
@@ -194,21 +199,24 @@ private fun CategoryFilterRow(
 ) {
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         // "Tất cả" chip
         item {
             FilterChip(
                 selected = selectedCategoryId == "all",
                 onClick = { onCategoryClick("all") },
-                label = { Text("Tất cả") }
+                label = { Text("Tất cả") },
+                modifier = Modifier.heightIn(min = 48.dp)
             )
         }
         items(categories, key = { it.id }) { category ->
             FilterChip(
                 selected = selectedCategoryId == category.id,
                 onClick = { onCategoryClick(category.id) },
-                label = { Text(category.vietnameseName) }
+                label = { Text(category.vietnameseName) },
+                modifier = Modifier.heightIn(min = 48.dp)
             )
         }
     }

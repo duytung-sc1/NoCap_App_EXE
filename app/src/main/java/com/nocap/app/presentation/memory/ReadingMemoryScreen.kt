@@ -85,7 +85,7 @@ fun ReadingMemoryScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "Bộ nhớ đọc",
+                        text = "Ghi nhớ",
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
                     )
                 },
@@ -130,16 +130,37 @@ fun ReadingMemoryScreen(
                     .padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Start with the user's saved knowledge; statistics remain in the toolbar.
+                // 1. Knowledge Search Entry
                 item {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Trở lại những điều bạn muốn nhớ", style = MaterialTheme.typography.titleMedium)
-                        Text("Tìm đoạn tô sáng, ghi chú hoặc ôn lại những ý đã lưu khi đọc.",
-                            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        OutlinedButton(onClick = onNavigateToSearch, modifier = Modifier.fillMaxWidth()) {
-                            Icon(Icons.Default.Search, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Tìm trong tài liệu và ghi chú")
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(onClick = onNavigateToSearch),
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Search,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = "Tìm kiếm tri thức trong toàn bộ thư viện...",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.weight(1f)
+                            )
                         }
                     }
                 }
@@ -153,7 +174,7 @@ fun ReadingMemoryScreen(
                             containerColor = if (uiState.dueTodayCount > 0)
                                 MaterialTheme.colorScheme.tertiaryContainer
                             else
-                                MaterialTheme.colorScheme.surfaceVariant
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
                         )
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
@@ -165,13 +186,13 @@ fun ReadingMemoryScreen(
                                     modifier = Modifier
                                         .size(44.dp)
                                         .background(
-                                            if (uiState.dueTodayCount > 0) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.outline,
+                                            if (uiState.dueTodayCount > 0) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
                                             CircleShape
                                         ),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
-                                        AppIcons.Book,
+                                        if (uiState.dueTodayCount > 0) AppIcons.Book else Icons.Default.Check,
                                         contentDescription = null,
                                         tint = Color.White
                                     )
@@ -187,7 +208,8 @@ fun ReadingMemoryScreen(
                                             "${uiState.dueTodayCount} nội dung cần ôn tập hôm nay"
                                         else
                                             "Bạn đã hoàn thành tất cả mục ôn tập hôm nay!",
-                                        style = MaterialTheme.typography.bodyMedium
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
@@ -195,38 +217,14 @@ fun ReadingMemoryScreen(
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Button(
                                     onClick = onNavigateToReviewQueue,
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 48.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
                                 ) {
                                     Text("Bắt đầu ôn tập (${uiState.dueTodayCount})")
                                 }
                             }
-                        }
-                    }
-                }
-
-                // 3. Knowledge Search Entry Button
-                item {
-                    OutlinedCard(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onNavigateToSearch() },
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                            Text(
-                                text = "Tìm kiếm tri thức trong toàn bộ thư viện...",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.weight(1f)
-                            )
                         }
                     }
                 }
@@ -336,22 +334,35 @@ private fun StatColumn(title: String, value: String) {
 fun HighlightCard(
     item: HighlightWithBook,
     onClick: () -> Unit,
-    onToggleReview: () -> Unit
+    onToggleReview: (() -> Unit)? = null
 ) {
     val highlightColor = when (item.highlight.color.uppercase()) {
-        "YELLOW" -> Color(0xFFFFF176)
-        "GREEN" -> Color(0xFFA5D6A7)
-        "BLUE" -> Color(0xFF90CAF9)
-        "PINK" -> Color(0xFFF48FB1)
-        else -> Color(0xFFFFF176)
+        "YELLOW" -> Color(0xFFF9E79F)
+        "GREEN" -> Color(0xFFA9DFBF)
+        "BLUE" -> Color(0xFFAED6F1)
+        "PINK" -> Color(0xFFF5B7B1)
+        else -> Color(0xFFF9E79F)
+    }
+
+    val chapterTitle = remember(item.highlight.locatorJson) {
+        try {
+            val obj = org.json.JSONObject(item.highlight.locatorJson)
+            obj.optString("title").takeIf { it.isNotBlank() }
+        } catch (_: Exception) {
+            null
+        }
     }
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+        )
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Row(
@@ -388,41 +399,58 @@ fun HighlightCard(
                             modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
                         )
                     }
+                    if (chapterTitle != null) {
+                        Text(
+                            text = "• $chapterTitle",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
 
-                IconButton(
+                if (onToggleReview != null) IconButton(
                     onClick = onToggleReview,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(48.dp)
                 ) {
                     Icon(
                         imageVector = if (item.isUnderReview) Icons.Default.CheckCircle else Icons.Default.Add,
                         contentDescription = localize("Ôn tập"),
                         tint = if (item.isUnderReview) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.outline,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Text(
                 text = "“${item.highlight.text.trim()}”",
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                    lineHeight = 22.sp
+                ),
                 maxLines = 3,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurface
             )
 
             if (!item.highlight.note.isNullOrBlank()) {
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                    ),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
-                        modifier = Modifier.padding(8.dp),
+                        modifier = Modifier.padding(10.dp),
                         verticalAlignment = Alignment.Top,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Icon(
                             Icons.Default.Edit,
@@ -450,14 +478,19 @@ fun BookmarkCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = 48.dp)
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
+        )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {

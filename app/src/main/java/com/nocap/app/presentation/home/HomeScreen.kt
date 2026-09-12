@@ -1,40 +1,59 @@
 package com.nocap.app.presentation.home
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import com.nocap.app.core.localization.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
+import com.nocap.app.core.designsystem.AppIcons
 import com.nocap.app.domain.model.Category
-import com.nocap.app.domain.model.HomeFeed
-import com.nocap.app.presentation.catalog.CatalogViewModel
 import com.nocap.app.presentation.components.BookCard
-import com.nocap.app.presentation.components.HorizontalBookCard
+import com.nocap.app.presentation.memory.HighlightCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,148 +61,431 @@ fun HomeScreen(
     onBookClick: (String) -> Unit,
     onContinueReadingClick: (String) -> Unit,
     onCategoryClick: (String) -> Unit,
-    viewModel: CatalogViewModel = viewModel(factory = CatalogViewModel.Factory)
+    onNavigateToLibrary: (() -> Unit)? = null,
+    onNavigateToMemory: (() -> Unit)? = null,
+    onNavigateToReader: ((String, String?) -> Unit)? = null,
+    viewModel: HomeViewModel = viewModel(
+        factory = HomeViewModel.provideFactory(LocalContext.current)
+    )
 ) {
-    val homeFeed by viewModel.homeFeed.collectAsStateWithLifecycle()
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
-            LargeTopAppBar(
+            TopAppBar(
                 title = {
-                    Text(
-                        text = "Chúc bạn đọc sách vui vẻ \uD83D\uDCDA",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Column {
+                        Text(
+                            text = "Không gian đọc",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Tiếp tục hành trình đọc và tích lũy tri thức",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 },
-                scrollBehavior = scrollBehavior,
-                colors = TopAppBarDefaults.largeTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    scrolledContainerColor = MaterialTheme.colorScheme.background
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background
                 )
             )
-        },
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection)
+        }
     ) { innerPadding ->
-        HomeContent(
-            feed = homeFeed,
-            innerPadding = innerPadding,
-            onBookClick = onBookClick,
-            onContinueReadingClick = onContinueReadingClick,
-            onCategoryClick = onCategoryClick
-        )
+        if (uiState.isLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    top = innerPadding.calculateTopPadding() + 4.dp,
+                    bottom = innerPadding.calculateBottomPadding() + 24.dp
+                ),
+                verticalArrangement = Arrangement.spacedBy(0.dp)
+            ) {
+                // 1. Welcome Card if brand new user
+                if (uiState.continueReading.isEmpty() && uiState.recentDocuments.isEmpty()) {
+                    item {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                            )
+                        ) {
+                            Column(modifier = Modifier.padding(20.dp)) {
+                                Text(
+                                    text = "Chào mừng bạn đến với Không gian đọc",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Thêm sách hoặc tài liệu từ thiết bị để bắt đầu trải nghiệm đọc cá nhân.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                if (onNavigateToLibrary != null) {
+                                    Spacer(modifier = Modifier.height(14.dp))
+                                    Button(
+                                        onClick = onNavigateToLibrary,
+                                        modifier = Modifier.heightIn(min = 48.dp)
+                                    ) {
+                                        Text("Mở Thư viện tài liệu")
+                                    }
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+                }
+
+                // 2. Continue Reading
+                if (uiState.continueReading.isNotEmpty()) {
+                    item {
+                        SectionHeader(title = "Tiếp tục đọc")
+                    }
+                    item {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            items(uiState.continueReading, key = { it.bookId }) { item ->
+                                HomeContinueReadingCard(
+                                    item = item,
+                                    onClick = { onContinueReadingClick(item.bookId) },
+                                    modifier = Modifier.width(260.dp)
+                                )
+                            }
+                        }
+                    }
+                    item { Spacer(modifier = Modifier.height(20.dp)) }
+                }
+
+                // 3. Recent Personal Documents
+                if (uiState.recentDocuments.isNotEmpty()) {
+                    item {
+                        SectionHeader(
+                            title = "Tài liệu gần đây",
+                            onSeeAll = onNavigateToLibrary
+                        )
+                    }
+                    item {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            items(uiState.recentDocuments, key = { it.bookId }) { doc ->
+                                HomeRecentDocumentCard(
+                                    doc = doc,
+                                    onClick = { onContinueReadingClick(doc.bookId) },
+                                    modifier = Modifier.width(130.dp)
+                                )
+                            }
+                        }
+                    }
+                    item { Spacer(modifier = Modifier.height(20.dp)) }
+                }
+
+                // 4. Recent Memory / Notes
+                if (uiState.recentMemory.isNotEmpty()) {
+                    item {
+                        SectionHeader(
+                            title = "Ghi nhớ gần đây",
+                            onSeeAll = onNavigateToMemory
+                        )
+                    }
+                    item {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            uiState.recentMemory.forEach { hl ->
+                                HighlightCard(
+                                    item = hl,
+                                    onClick = {
+                                        onNavigateToReader?.invoke(hl.book.id, hl.highlight.locatorJson)
+                                            ?: onContinueReadingClick(hl.book.id)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    item { Spacer(modifier = Modifier.height(20.dp)) }
+                }
+
+                // 5. Explore More (Secondary Discovery)
+                if (uiState.featuredBooks.isNotEmpty() || uiState.categories.isNotEmpty() || uiState.newBooks.isNotEmpty()) {
+                    item {
+                        SectionHeader(title = "Khám phá thêm")
+                    }
+
+                    // Featured books
+                    if (uiState.featuredBooks.isNotEmpty()) {
+                        item {
+                            Text(
+                                text = "Sách tuyển chọn",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                            )
+                        }
+                        item {
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                items(uiState.featuredBooks, key = { it.id }) { book ->
+                                    BookCard(
+                                        book = book,
+                                        onClick = { onBookClick(book.id) },
+                                        modifier = Modifier.width(130.dp)
+                                    )
+                                }
+                            }
+                        }
+                        item { Spacer(modifier = Modifier.height(16.dp)) }
+                    }
+
+                    // Categories
+                    if (uiState.categories.isNotEmpty()) {
+                        item {
+                            SectionHeader(
+                                title = "Khám phá theo thể loại",
+                                onSeeAll = { onCategoryClick("all") }
+                            )
+                        }
+                        item {
+                            CategoriesRow(
+                                categories = uiState.categories,
+                                onCategoryClick = onCategoryClick
+                            )
+                        }
+                        item { Spacer(modifier = Modifier.height(16.dp)) }
+                    }
+
+                    // New Arrivals
+                    if (uiState.newBooks.isNotEmpty()) {
+                        item {
+                            Text(
+                                text = "Sách mới",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                            )
+                        }
+                        item {
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                items(uiState.newBooks, key = { it.id }) { book ->
+                                    BookCard(
+                                        book = book,
+                                        onClick = { onBookClick(book.id) },
+                                        modifier = Modifier.width(130.dp)
+                                    )
+                                }
+                            }
+                        }
+                        item { Spacer(modifier = Modifier.height(24.dp)) }
+                    }
+                }
+            }
+        }
     }
 }
 
 @Composable
-private fun HomeContent(
-    feed: HomeFeed,
-    innerPadding: PaddingValues,
-    onBookClick: (String) -> Unit,
-    onContinueReadingClick: (String) -> Unit,
-    onCategoryClick: (String) -> Unit
+private fun HomeContinueReadingCard(
+    item: ContinueReadingItem,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            top = innerPadding.calculateTopPadding(),
-            bottom = innerPadding.calculateBottomPadding() + 16.dp
-        ),
-        verticalArrangement = Arrangement.spacedBy(0.dp)
+    Card(
+        modifier = modifier.clickable(onClick = onClick),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.5.dp),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+        )
     ) {
-        if (feed.featuredBooks.isEmpty() && feed.newBooks.isEmpty()) {
-            item {
-                Text("Chưa có sách để giới thiệu", style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
-                Text("Kiểm tra kết nối để xem danh mục. Bạn vẫn có thể vào Tài liệu để thêm tệp hoặc đọc thư viện trên máy.",
-                    style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 16.dp))
-                TextButton(onClick = { onCategoryClick("all") }, modifier = Modifier.padding(horizontal = 8.dp)) {
-                    Text("Mở danh mục sách")
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(56.dp)
+                    .height(82.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center
+            ) {
+                if (!item.coverUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = item.coverUrl,
+                        contentDescription = item.title,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.matchParentSize()
+                    )
+                } else {
+                    Icon(
+                        AppIcons.Book,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
             }
-        }
-        // --- Continue Reading ---
-        if (feed.continueReading.isNotEmpty()) {
-            item { SectionHeader(title = "Đọc tiếp") }
-            item {
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(feed.continueReading, key = { it.bookId }) { progress ->
-                        val book = feed.featuredBooks.find { it.id == progress.bookId }
-                            ?: feed.newBooks.find { it.id == progress.bookId }
-                        book?.let {
-                            HorizontalBookCard(
-                                book = it,
-                                onClick = { onContinueReadingClick(it.id) },
-                                modifier = Modifier.width(240.dp)
-                            )
-                        }
-                    }
-                }
-            }
-            item { Spacer(modifier = Modifier.height(24.dp)) }
-        }
 
-        // --- Featured Books ---
-        if (feed.featuredBooks.isNotEmpty()) {
-            item { SectionHeader(title = "Sách nổi bật") }
-            item {
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    items(feed.featuredBooks, key = { it.id }) { book ->
-                        BookCard(
-                            book = book,
-                            onClick = { onBookClick(book.id) },
-                            modifier = Modifier.width(130.dp)
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer
+                    ) {
+                        Text(
+                            text = item.formatName,
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
                         )
                     }
+                    Text(
+                        text = "${item.progressPercent}%",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
-            }
-            item { Spacer(modifier = Modifier.height(24.dp)) }
-        }
 
-        // --- Categories ---
-        if (feed.categories.isNotEmpty()) {
-            item {
-                SectionHeader(
-                    title = "Khám phá thể loại",
-                    onSeeAll = { onCategoryClick("all") }
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Text(
+                    text = item.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    minLines = 2,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+
+                Spacer(modifier = Modifier.height(2.dp))
+
+                Text(
+                    text = item.author,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                LinearProgressIndicator(
+                    progress = { (item.progressPercent.coerceIn(0, 100)) / 100f },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .clip(RoundedCornerShape(2.dp)),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant
                 )
             }
-            item {
-                CategoriesRow(
-                    categories = feed.categories,
-                    onCategoryClick = onCategoryClick
+        }
+    }
+}
+
+@Composable
+private fun HomeRecentDocumentCard(
+    doc: RecentDocumentItem,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier.clickable(onClick = onClick)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(2f / 3f)
+                .clip(RoundedCornerShape(10.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center
+        ) {
+            if (!doc.coverUrl.isNullOrBlank()) {
+                AsyncImage(
+                    model = doc.coverUrl,
+                    contentDescription = doc.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.matchParentSize()
+                )
+            } else {
+                Icon(
+                    AppIcons.Book,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.outline,
+                    modifier = Modifier.size(32.dp)
                 )
             }
-            item { Spacer(modifier = Modifier.height(24.dp)) }
+
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(6.dp),
+                shape = RoundedCornerShape(4.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
+            ) {
+                Text(
+                    text = doc.formatName,
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                )
+            }
         }
 
-        // --- New Arrivals ---
-        if (feed.newBooks.isNotEmpty()) {
-            item { SectionHeader(title = "Sách mới") }
-            item {
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(feed.newBooks, key = { it.id }) { book ->
-                        BookCard(
-                            book = book,
-                            onClick = { onBookClick(book.id) },
-                            modifier = Modifier.width(130.dp)
-                        )
-                    }
-                }
-            }
-            item { Spacer(modifier = Modifier.height(24.dp)) }
-        }
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Text(
+            text = doc.title,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            minLines = 2,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+
+        Text(
+            text = doc.author,
+            style = MaterialTheme.typography.bodySmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -203,10 +505,14 @@ private fun SectionHeader(
             text = title,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground
+            color = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.weight(1f).padding(end = 8.dp)
         )
         if (onSeeAll != null) {
-            TextButton(onClick = onSeeAll) {
+            TextButton(
+                onClick = onSeeAll,
+                modifier = Modifier.heightIn(min = 48.dp)
+            ) {
                 Text(
                     text = "Xem tất cả",
                     style = MaterialTheme.typography.labelMedium,
@@ -224,7 +530,8 @@ private fun CategoriesRow(
 ) {
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         items(categories, key = { it.id }) { category ->
             CategoryChip(
@@ -244,14 +551,13 @@ private fun CategoryChip(
         onClick = onClick,
         shape = RoundedCornerShape(50),
         color = MaterialTheme.colorScheme.primaryContainer,
-        modifier = Modifier
+        modifier = Modifier.heightIn(min = 48.dp)
     ) {
         Text(
             text = category.vietnameseName,
             style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onPrimaryContainer,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
         )
     }
 }

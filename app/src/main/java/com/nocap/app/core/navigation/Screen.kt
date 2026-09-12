@@ -14,7 +14,7 @@ sealed class Screen(val route: String, val title: String? = null, val icon: Imag
         fun createRoute(categoryId: String? = null) = if (categoryId != null) "discover?categoryId=$categoryId" else "discover"
     }
     data object Library : Screen("library", "Thư viện", Icons.AutoMirrored.Filled.List)
-    data object Memory : Screen("memory", "Bộ nhớ", com.nocap.app.core.designsystem.AppIcons.Bookmarks)
+    data object Memory : Screen("memory", "Ghi nhớ", com.nocap.app.core.designsystem.AppIcons.Bookmarks)
     data object Favorites : Screen("favorites", "Yêu thích", Icons.Default.Favorite)
     data object Settings : Screen("settings", "Cài đặt", Icons.Default.Settings)
     data object BookDetails : Screen("book_details/{bookId}") {

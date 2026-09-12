@@ -471,7 +471,7 @@ fun LibraryScreen(
                     } else {
                         LazyColumn(
                             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 88.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
                             modifier = Modifier.fillMaxSize()
                         ) {
                             items(items = uiState.books, key = { it.book.id }) { libraryBook ->
@@ -1482,7 +1482,7 @@ fun LibraryScreen(
                                 fontWeight = FontWeight.SemiBold
                             )
                             Text(
-                                text = "Chọn tệp EPUB hoặc PDF có sẵn trên máy",
+                                text = "Chọn tệp EPUB, PDF, TXT, MD, HTML, DOCX, CBZ hoặc ảnh",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -1652,20 +1652,25 @@ private fun SmartViewsAndSortRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.weight(1f)
         ) {
             items(LibrarySmartView.entries.toTypedArray()) { smartView ->
                 FilterChip(
                     selected = selectedSmartView == smartView,
                     onClick = { onSmartViewSelected(smartView) },
-                    label = { Text(smartView.displayName, fontSize = 12.sp) }
+                    label = { Text(smartView.displayName, fontSize = 12.sp) },
+                    modifier = Modifier.heightIn(min = 48.dp)
                 )
             }
         }
 
         Box {
-            IconButton(onClick = { showSortMenu = true }) {
+            IconButton(
+                onClick = { showSortMenu = true },
+                modifier = Modifier.size(48.dp)
+            ) {
                 Icon(
                     imageVector = AppIcons.Sort,
                     contentDescription = localize("Sắp xếp"),
@@ -1783,13 +1788,13 @@ private fun DocumentCardItem(
                         }
                         IconButton(
                             onClick = onToggleFavorite,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(48.dp)
                         ) {
                             Icon(
                                 imageVector = if (libraryBook.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                                 contentDescription = localize("Yêu thích"),
                                 tint = if (libraryBook.isFavorite) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(20.dp)
                             )
                         }
                     }
@@ -2005,7 +2010,7 @@ private fun DocumentCardItem(
 
                                 // Status options
                                 DropdownMenuItem(
-                                    text = { Text("Đánh dấu: Chưa đọc") },
+                                    text = { Text("Chưa đọc") },
                                     leadingIcon = {
                                         if (book.readingStatus == DocumentReadingStatus.UNREAD) {
                                             Icon(Icons.Default.Check, contentDescription = null)
@@ -2017,7 +2022,7 @@ private fun DocumentCardItem(
                                     }
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("Đánh dấu: Đang đọc") },
+                                    text = { Text("Đang đọc") },
                                     leadingIcon = {
                                         if (book.readingStatus == DocumentReadingStatus.READING) {
                                             Icon(Icons.Default.Check, contentDescription = null)
@@ -2029,7 +2034,7 @@ private fun DocumentCardItem(
                                     }
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("Đánh dấu: Hoàn thành") },
+                                    text = { Text("Đã đọc xong") },
                                     leadingIcon = {
                                         if (book.readingStatus == DocumentReadingStatus.COMPLETED) {
                                             Icon(Icons.Default.Check, contentDescription = null)
@@ -2044,7 +2049,7 @@ private fun DocumentCardItem(
                                 HorizontalDivider()
 
                                 DropdownMenuItem(
-                                    text = { Text(if (book.isPinned) "Bỏ ghim" else "Ghim tài liệu") },
+                                    text = { Text(if (book.isPinned) "Bỏ ghim" else "Ghim lên đầu") },
                                     leadingIcon = { Icon(AppIcons.Pin, contentDescription = null) },
                                     onClick = {
                                         showMenu = false
@@ -2053,7 +2058,7 @@ private fun DocumentCardItem(
                                 )
 
                                 DropdownMenuItem(
-                                    text = { Text(if (book.isInInbox) "Đánh dấu đã tổ chức" else "Chuyển vào Chưa phân loại") },
+                                    text = { Text(if (book.isInInbox) "Đã phân loại" else "Hộp thư đến") },
                                     leadingIcon = { Icon(Icons.Default.CheckCircle, contentDescription = null) },
                                     onClick = {
                                         showMenu = false
@@ -2062,7 +2067,7 @@ private fun DocumentCardItem(
                                 )
 
                                 DropdownMenuItem(
-                                    text = { Text(if (book.isArchived) "Bỏ lưu trữ" else "Lưu trữ tài liệu") },
+                                    text = { Text(if (book.isArchived) "Bỏ lưu trữ" else "Lưu trữ") },
                                     leadingIcon = { Icon(Icons.Default.Clear, contentDescription = null) },
                                     onClick = {
                                         showMenu = false
@@ -2073,7 +2078,7 @@ private fun DocumentCardItem(
                                 HorizontalDivider()
 
                                 DropdownMenuItem(
-                                    text = { Text("Xóa khỏi thư viện", color = MaterialTheme.colorScheme.error) },
+                                    text = { Text("Xóa tài liệu", color = MaterialTheme.colorScheme.error) },
                                     leadingIcon = {
                                         Icon(
                                             imageVector = Icons.Default.Delete,
@@ -2190,7 +2195,7 @@ private fun CollectionsView(
     } else {
         LazyColumn(
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxSize()
         ) {
             items(collections, key = { it.id }) { col ->
@@ -2213,7 +2218,7 @@ private fun CollectionsView(
                         Surface(
                             shape = RoundedCornerShape(8.dp),
                             color = MaterialTheme.colorScheme.primaryContainer,
-                            modifier = Modifier.size(44.dp)
+                            modifier = Modifier.size(48.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
@@ -2320,7 +2325,7 @@ private fun TagsView(
     } else {
         LazyColumn(
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxSize()
         ) {
             items(tags, key = { it.id }) { tag ->
@@ -2343,7 +2348,7 @@ private fun TagsView(
                         Surface(
                             shape = RoundedCornerShape(8.dp),
                             color = MaterialTheme.colorScheme.secondaryContainer,
-                            modifier = Modifier.size(44.dp)
+                            modifier = Modifier.size(48.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
@@ -2474,7 +2479,7 @@ private fun EmptyDocumentsView(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Nhập tài liệu EPUB hoặc PDF từ thiết bị hoặc tải từ liên kết để bắt đầu.",
+                    text = "Thêm tài liệu từ thiết bị hoặc tải từ liên kết để bắt đầu (hỗ trợ EPUB, PDF, TXT, MD, HTML, DOCX, CBZ, ảnh).",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center

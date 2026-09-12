@@ -112,6 +112,15 @@ fun AppNavHost(
                         },
                         onCategoryClick = { categoryId ->
                             navController.navigate(Screen.Discover.createRoute(categoryId))
+                        },
+                        onNavigateToLibrary = {
+                            navController.navigate(Screen.Library.route)
+                        },
+                        onNavigateToMemory = {
+                            navController.navigate(Screen.Memory.route)
+                        },
+                        onNavigateToReader = { bookId, locatorJson ->
+                            navController.navigate(Screen.Reader.createRoute(bookId, locatorJson))
                         }
                     )
                 }
