@@ -6,6 +6,7 @@ import com.nocap.app.core.localization.localize
 import android.content.Context
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -205,35 +206,36 @@ fun LibraryScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
                             .padding(horizontal = 8.dp, vertical = 6.dp),
                         horizontalArrangement = Arrangement.SpaceAround,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        IconButton(onClick = { showBulkTagDialog = true }) {
+                        TextButton(onClick = { showBulkTagDialog = true }, modifier = Modifier.heightIn(min = 64.dp)) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Icon(AppIcons.Tag, contentDescription = localize("Gắn thẻ"), modifier = Modifier.size(20.dp))
                                 Text("Thẻ", fontSize = 10.sp)
                             }
                         }
-                        IconButton(onClick = { showBulkCollectionDialog = true }) {
+                        TextButton(onClick = { showBulkCollectionDialog = true }, modifier = Modifier.heightIn(min = 64.dp)) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Icon(Icons.AutoMirrored.Filled.List, contentDescription = localize("Bộ sưu tập"), modifier = Modifier.size(20.dp))
                                 Text("Bộ sưu tập", fontSize = 10.sp)
                             }
                         }
-                        IconButton(onClick = { showBulkStatusDialog = true }) {
+                        TextButton(onClick = { showBulkStatusDialog = true }, modifier = Modifier.heightIn(min = 64.dp)) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Icon(Icons.Default.CheckCircle, contentDescription = localize("Trạng thái"), modifier = Modifier.size(20.dp))
                                 Text("Trạng thái", fontSize = 10.sp)
                             }
                         }
-                        IconButton(onClick = { viewModel.bulkSetPinned(true) }) {
+                        TextButton(onClick = { viewModel.bulkSetPinned(true) }, modifier = Modifier.heightIn(min = 64.dp)) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Icon(AppIcons.Pin, contentDescription = localize("Ghim"), modifier = Modifier.size(20.dp))
                                 Text("Ghim", fontSize = 10.sp)
                             }
                         }
-                        IconButton(onClick = { viewModel.bulkSetArchived(true) }) {
+                        TextButton(onClick = { viewModel.bulkSetArchived(true) }, modifier = Modifier.heightIn(min = 64.dp)) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Icon(Icons.Default.Clear, contentDescription = localize("Lưu trữ"), modifier = Modifier.size(20.dp))
                                 Text("Lưu trữ", fontSize = 10.sp)

@@ -14,9 +14,8 @@ import org.readium.r2.streamer.parser.DefaultPublicationParser
 import java.io.File
 import java.io.FileNotFoundException
 
-class ReadiumPublicationManager(
-    private val context: Context
-) {
+class ReadiumPublicationManager(context: Context) {
+    private val context = context.applicationContext
     private val httpClient by lazy {
         DefaultHttpClient()
     }

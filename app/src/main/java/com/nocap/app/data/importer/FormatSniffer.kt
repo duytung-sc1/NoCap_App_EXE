@@ -70,7 +70,10 @@ object FormatSniffer {
     }
 
     fun sniffFromExtension(filenameOrUrl: String): PublicationFormat? {
-        val clean = filenameOrUrl.substringBefore('?').substringBefore('#')
+        val clean = if (filenameOrUrl.startsWith("https://", ignoreCase = true) ||
+            filenameOrUrl.startsWith("http://", ignoreCase = true)) {
+            filenameOrUrl.substringBefore('?').substringBefore('#')
+        } else filenameOrUrl
         val ext = clean.substringAfterLast('.', "").lowercase()
         return when (ext) {
             "epub" -> PublicationFormat.EPUB

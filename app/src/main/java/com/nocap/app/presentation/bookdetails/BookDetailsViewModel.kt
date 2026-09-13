@@ -47,13 +47,15 @@ class BookDetailsViewModel(
 ) : ViewModel() {
 
     private val _book = MutableStateFlow<CatalogBook?>(null)
+    private val downloadError = MutableStateFlow<String?>(null)
 
     val uiState: StateFlow<BookDetailsUiState> = combine(
         _book,
         favoriteRepository.observeIsFavorite(bookId),
-        downloadRepository.observeDownload(bookId)
-    ) { book, isFavorite, downloadedBook ->
-        val primaryAction = computePrimaryAction(book, downloadedBook)
+        downloadRepository.observeDownload(bookId),
+        downloadError
+    ) { book, isFavorite, downloadedBook, error ->
+        val primaryAction = error?.let { BookPrimaryAction.Retry(it) } ?: computePrimaryAction(book, downloadedBook)
         BookDetailsUiState(
             book = book,
             isFavorite = isFavorite,
@@ -109,7 +111,14 @@ class BookDetailsViewModel(
 
     fun onStartDownload() {
         viewModelScope.launch {
-            downloadRepository.startDownload(bookId)
+            downloadError.value = null
+            try {
+                downloadRepository.startDownload(bookId)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                downloadError.value = "Chưa tải được tài liệu. Kiểm tra kết nối và dung lượng trống rồi thử lại. Sách đã lưu vẫn được giữ."
+            }
         }
     }
 
@@ -120,9 +129,7 @@ class BookDetailsViewModel(
     }
 
     fun onRetryDownload() {
-        viewModelScope.launch {
-            downloadRepository.retryDownload(bookId)
-        }
+        onStartDownload()
     }
 
     fun onDeleteDownload() {

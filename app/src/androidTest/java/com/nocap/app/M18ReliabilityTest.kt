@@ -1,0 +1,120 @@
+package com.nocap.app
+
+import android.content.ContextWrapper
+import android.net.Uri
+import android.os.Bundle
+import androidx.room.Room
+import androidx.room.withTransaction
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import com.nocap.app.core.database.AppDatabase
+import com.nocap.app.data.importer.LocalImportBookRepository
+import com.nocap.app.data.search.LocalKnowledgeSearchRepository
+import com.nocap.app.domain.model.KnowledgeItemType
+import com.nocap.app.domain.model.PublicationSource
+import com.nocap.app.domain.repository.ImportException
+import kotlinx.coroutines.*
+import org.junit.Assert.*
+import org.junit.Test
+import org.junit.runner.RunWith
+import java.io.File
+import java.util.UUID
+import kotlin.system.measureTimeMillis
+
+/** Generated fixtures and an isolated in-memory DB; never touches an account or backend. */
+@RunWith(AndroidJUnit4::class)
+class M18ReliabilityTest {
+    private suspend fun isolated(test: suspend (AppDatabase, LocalImportBookRepository, File) -> Unit) {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val base = instrumentation.targetContext
+        val root = File(base.cacheDir, "m18-${UUID.randomUUID()}").apply { mkdirs() }
+        val context = object : ContextWrapper(base) {
+            override fun getFilesDir() = File(root, "files").apply { mkdirs() }
+            override fun getCacheDir() = File(root, "cache").apply { mkdirs() }
+        }
+        val db = Room.inMemoryDatabaseBuilder(base, AppDatabase::class.java).build()
+        try {
+            val repo = LocalImportBookRepository(context, db.catalogDao(), db.downloadDao(), db.progressDao(),
+                db.bookmarkDao(), db.favoriteDao(), database = db)
+            test(db, repo, root)
+        } finally { db.close(); check(root.parentFile == base.cacheDir); root.deleteRecursively() }
+    }
+
+    @Test fun interruptedAndMalformedImportsRemainRecoverable() = runBlocking(Dispatchers.IO) {
+        isolated { db, repo, root ->
+            val text = File(root, "Đọc 日本語 한글 #1.txt").apply {
+                writeText((1..4000).joinToString("\n\n") { "Paragraph $it " + "reading ".repeat(30) })
+            }
+            try {
+                repo.importPublication(PublicationSource.LocalUri(Uri.fromFile(text))) {
+                    throw CancellationException("controlled interruption")
+                }
+                fail("Cancellation must propagate")
+            } catch (_: CancellationException) { }
+            assertTrue(File(root, "cache").listFiles().orEmpty().isEmpty())
+            assertTrue(db.catalogDao().getAllBooks().isEmpty())
+            val failed = repo.importPublication(PublicationSource.LocalUri(Uri.fromFile(text))) {
+                throw java.io.IOException("controlled provider failure")
+            }
+            assertTrue(failed.isFailure)
+            assertTrue(File(root, "cache").listFiles().orEmpty().isEmpty())
+            for ((name, content) in listOf("empty.txt" to "", "broken.pdf" to "%PDF-broken", "broken.png" to "not an image")) {
+                val invalid = File(root, name).apply { writeText(content) }
+                assertTrue(name, repo.importPublication(PublicationSource.LocalUri(Uri.fromFile(invalid))).isFailure)
+            }
+            assertTrue(repo.importPublication(PublicationSource.LocalUri(Uri.fromFile(File(root, "missing.txt")))).isFailure)
+            assertTrue(db.catalogDao().getAllBooks().isEmpty())
+            val results = coroutineScope { listOf(async { repo.importPublication(PublicationSource.LocalUri(Uri.fromFile(text))) },
+                async { repo.importPublication(PublicationSource.LocalUri(Uri.fromFile(text))) }).awaitAll() }
+            assertEquals(results.map { it.exceptionOrNull()?.message }.toString(), 1, results.count { it.isSuccess })
+            assertEquals(1, results.count { it.exceptionOrNull() is ImportException.DuplicateBook })
+            val book = db.catalogDao().getAllBooks().single()
+            assertEquals(text.name, book.originalFilename)
+            assertEquals(text.readText(), File(db.downloadDao().getDownloadByBookId(book.id)!!.localFilePath).readText())
+        }
+    }
+
+    @Test fun failedDownloadInsertRollsBackMetadata() = runBlocking(Dispatchers.IO) {
+        isolated { db, repo, root ->
+            db.openHelper.writableDatabase.execSQL("CREATE TRIGGER m18_fail BEFORE INSERT ON downloaded_books BEGIN SELECT RAISE(ABORT, 'controlled failure'); END")
+            val file = File(root, "rollback.txt").apply { writeText("A real document for atomic import testing.") }
+            assertTrue(repo.importPublication(PublicationSource.LocalUri(Uri.fromFile(file))).isFailure)
+            assertTrue(db.catalogDao().getAllBooks().isEmpty())
+            db.openHelper.writableDatabase.execSQL("DROP TRIGGER m18_fail")
+            assertTrue(repo.importPublication(PublicationSource.LocalUri(Uri.fromFile(file))).isSuccess)
+            assertEquals(1, db.catalogDao().getAllBooks().size)
+        }
+    }
+
+    @Test fun largeLibrarySearchBaseline() = runBlocking(Dispatchers.IO) {
+        isolated { db, repo, root ->
+            val file = File(root, "seed.txt").apply { writeText("Temporary local stress document.") }
+            val id = repo.importPublication(PublicationSource.LocalUri(Uri.fromFile(file))).getOrThrow()
+            val template = db.catalogDao().getBookById(id)!!
+            db.withTransaction {
+                db.catalogDao().insertBooks((1..3000).map { template.copy(id = "stress-$it", title = "Knowledge $it", contentHash = null) })
+            }
+            val search = LocalKnowledgeSearchRepository(db.catalogDao(), db.highlightDao(), db.bookmarkDao(), db.downloadDao())
+            val millis = measureTimeMillis {
+                assertEquals(3000, search.search("Knowledge", KnowledgeItemType.DOCUMENT, null).size)
+            }
+            InstrumentationRegistry.getInstrumentation().sendStatus(0, Bundle().apply {
+                putString("stream", "M18 isolated 3000-document search: ${millis}ms\n")
+            })
+        }
+    }
+
+    @Test fun updatingCategoryWithExistingBooksDoesNotDeleteOrFail() = runBlocking(Dispatchers.IO) {
+        isolated { db, repo, root ->
+            val file = File(root, "first.txt").apply { writeText("First retained book") }
+            val id = repo.importPublication(PublicationSource.LocalUri(Uri.fromFile(file))).getOrThrow()
+            val category = db.catalogDao().getCategoryById("imported")!!
+            db.catalogDao().insertCategories(listOf(category.copy(name = "Updated category")))
+            val second = File(root, "second.txt").apply { writeText("Second retained book") }
+            assertTrue(repo.importPublication(PublicationSource.LocalUri(Uri.fromFile(second))).isSuccess)
+            assertNotNull(db.catalogDao().getBookById(id))
+            assertEquals(2, db.catalogDao().getAllBooks().size)
+            assertEquals("Updated category", db.catalogDao().getCategoryById("imported")!!.name)
+        }
+    }
+}

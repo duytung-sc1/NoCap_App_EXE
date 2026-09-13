@@ -233,13 +233,28 @@ class ReaderViewModel(
     private var searchJob: Job? = null
     private var currentPublication: Publication? = null
     private var lastSavedTime = 0L
+    private var loadJob: Job? = null
+    private val progressWriteLock = kotlinx.coroutines.sync.Mutex()
+    private var lastPersistedTime = Long.MIN_VALUE
+
+    private suspend fun persistProgress(progress: ReadingProgress) {
+        progressWriteLock.lock()
+        try {
+            if (progress.lastReadAt >= lastPersistedTime) {
+                libraryRepository.saveReadingProgress(progress)
+                lastPersistedTime = progress.lastReadAt
+            }
+        } finally { progressWriteLock.unlock() }
+    }
 
     init {
         loadPublication()
     }
 
     fun loadPublication() {
-        viewModelScope.launch {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
+            try {
             _uiState.value = ReaderUiState.Loading
 
             var downloaded = downloadRepository.observeDownload(bookId).first()
@@ -315,6 +330,11 @@ class ReaderViewModel(
 
                 _uiState.value = ReaderUiState.Error(error.message ?: "Không thể mở sách")
             }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                _uiState.value = ReaderUiState.Error("Chưa mở được tài liệu. Hãy quay lại thư viện và thử lại; dữ liệu trên máy vẫn được giữ.")
+            }
         }
     }
 
@@ -336,7 +356,7 @@ class ReaderViewModel(
                 chapterTitle = chapterTitle,
                 lastReadAt = now
             )
-            libraryRepository.saveReadingProgress(progress)
+            persistProgress(progress)
 
             val currentBook = catalogRepository.getBookById(bookId)
             if (currentBook != null) {
@@ -361,8 +381,8 @@ class ReaderViewModel(
         val progression = (target?.locations?.progression ?: 0.0).toFloat().coerceIn(0f, 1f)
         endActiveSession(progression)
         if (target == null) return
-        viewModelScope.launch {
-            val now = System.currentTimeMillis()
+        val now = System.currentTimeMillis()
+        ReadingSessionManager.processScope.launch {
             val chapterTitle = target.title
             val locatorJson = publicationManager.serializeLocator(target)
 
@@ -373,7 +393,7 @@ class ReaderViewModel(
                 chapterTitle = chapterTitle,
                 lastReadAt = now
             )
-            libraryRepository.saveReadingProgress(progress)
+            persistProgress(progress)
         }
     }
 
@@ -434,6 +454,7 @@ class ReaderViewModel(
                 }
 
                 val collected = mutableListOf<SearchResultItem>()
+                try {
                 while (collected.size < 60) {
                     val res = iterator.next()
                     if (res is Try.Success) {
@@ -456,9 +477,9 @@ class ReaderViewModel(
                         break
                     }
                 }
-                iterator.close()
+                } finally { iterator.close() }
             } catch (e: Exception) {
-                // Cancelled or search failed
+                if (e is kotlinx.coroutines.CancellationException) throw e
             } finally {
                 _isSearching.value = false
             }
@@ -712,6 +733,7 @@ class ReaderViewModel(
     }
 
     override fun onCleared() {
+        saveCurrentLocationImmediately(_currentLocator.value)
         super.onCleared()
         searchJob?.cancel()
         currentPublication?.let { publicationManager.closePublication(it) }

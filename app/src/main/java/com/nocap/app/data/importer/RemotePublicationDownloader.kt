@@ -22,6 +22,7 @@ class RemotePublicationDownloader(
     private val baseClient: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
+        .callTimeout(180, TimeUnit.SECONDS)
         .build(),
     private val cacheDirectory: File? = null
 ) {
@@ -77,6 +78,7 @@ class RemotePublicationDownloader(
                 val resp = try {
                     call.execute()
                 } catch (e: IOException) {
+                    currentCoroutineContext().ensureActive()
                     return@withContext Result.failure(
                         ImportException.DownloadFailed("Lỗi kết nối mạng: ${e.localizedMessage}")
                     )
@@ -203,7 +205,7 @@ class RemotePublicationDownloader(
             )
         } catch (e: kotlinx.coroutines.CancellationException) {
             tempFile.delete()
-            throw ImportException.DownloadCancelled()
+            throw e
         } catch (e: Exception) {
             tempFile.delete()
             if (e is ImportException) {
@@ -211,6 +213,8 @@ class RemotePublicationDownloader(
             } else {
                 Result.failure(ImportException.DownloadFailed("Lỗi khi tải tệp: ${e.localizedMessage}"))
             }
+        } finally {
+            response?.close()
         }
     }
 

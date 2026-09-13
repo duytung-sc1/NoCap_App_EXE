@@ -35,6 +35,15 @@ android {
                 "proguard-rules.pro"
             )
         }
+        create("productionPreview") {
+            initWith(getByName("release"))
+            matchingFallbacks += listOf("release")
+            signingConfig = signingConfigs.getByName("debug")
+            isDebuggable = false
+            buildConfigField("String", "BACKEND_BASE_URL", "\"https://nocap-ebook-api.buiminhhien001.workers.dev\"")
+            // Internal preview never enables purchases, even with a local product property.
+            buildConfigField("String", "PLAY_PRO_PRODUCT_ID", "\"\"")
+        }
     }
 
     compileOptions {

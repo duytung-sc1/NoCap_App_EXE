@@ -14,7 +14,7 @@ interface CatalogDao {
     @Query("SELECT * FROM categories ORDER BY display_order ASC")
     fun observeCategories(): Flow<List<CategoryEntity>>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @androidx.room.Upsert
     suspend fun insertCategories(categories: List<CategoryEntity>)
 
     @Query("SELECT * FROM catalog_books")

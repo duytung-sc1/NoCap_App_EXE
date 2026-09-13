@@ -25,6 +25,12 @@ import com.nocap.app.data.parser.ImageValidator
 import com.nocap.app.data.parser.MarkdownParser
 import com.nocap.app.data.parser.TxtParser
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import androidx.room.withTransaction
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileInputStream
@@ -40,8 +46,10 @@ class LocalImportBookRepository(
     private val bookmarkDao: BookmarkDao,
     private val favoriteDao: FavoriteDao,
     private val publicationManager: ReadiumPublicationManager = ReadiumPublicationManager(context),
-    private val remoteDownloader: RemotePublicationDownloader = RemotePublicationDownloader(context)
+    private val remoteDownloader: RemotePublicationDownloader = RemotePublicationDownloader(context),
+    private val database: com.nocap.app.core.database.AppDatabase = com.nocap.app.core.database.AppDatabase.getInstance(context)
 ) : ImportBookRepository {
+    companion object { private val importLock = Mutex() }
     private val profile = com.nocap.app.data.sync.Profiles.active.value
     private val profileFiles = com.nocap.app.data.sync.Profiles.files(context, profile)
 
@@ -53,7 +61,7 @@ class LocalImportBookRepository(
     override suspend fun importPublication(
         source: PublicationSource,
         onProgress: ((DownloadProgress) -> Unit)?
-    ): Result<String> = withContext(Dispatchers.IO) {
+    ): Result<String> = importLock.withLock { withContext(Dispatchers.IO) {
         var tempFile: File? = null
         try {
             var suggestedFilename: String? = null
@@ -138,12 +146,13 @@ class LocalImportBookRepository(
                         )
                     }
                     val publication = publicationResult.getOrThrow()
+                    try {
                     val rawTitle = publication.metadata.title
                     if (!rawTitle.isNullOrBlank()) title = rawTitle
                     val rawAuthor = publication.metadata.authors.firstOrNull()?.name?.ifBlank { null }
                     if (rawAuthor != null) author = rawAuthor
                     description = publication.metadata.description ?: ""
-                    publicationManager.closePublication(publication)
+                    } finally { publicationManager.closePublication(publication) }
                 }
                 PublicationFormat.TXT -> {
                     try {
@@ -302,19 +311,23 @@ class LocalImportBookRepository(
                 downloadedAt = System.currentTimeMillis()
             )
 
-            catalogDao.insertBook(catalogEntity)
-            downloadDao.upsertDownload(downloadEntity)
+            currentCoroutineContext().ensureActive()
+            database.withTransaction {
+                catalogDao.insertBook(catalogEntity)
+                downloadDao.upsertDownload(downloadEntity)
+            }
 
             Result.success(bookId)
         } catch (e: Exception) {
             tempFile?.delete()
+            if (e is CancellationException) throw e
             if (e is ImportException) {
                 Result.failure(e)
             } else {
                 Result.failure(ImportException.GeneralError("Lỗi khi nhập sách: ${e.localizedMessage ?: "Không xác định"}"))
             }
         }
-    }
+    } }
 
     override suspend fun deleteImportedBook(bookId: String): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
@@ -336,7 +349,7 @@ class LocalImportBookRepository(
         }
     }
 
-    private fun copyUriToTemp(
+    private suspend fun copyUriToTemp(
         uri: Uri,
         suggestedFilename: String?,
         onProgress: ((DownloadProgress) -> Unit)?
@@ -361,10 +374,12 @@ class LocalImportBookRepository(
         var copiedBytes = 0L
         val buffer = ByteArray(8192)
 
+        try {
         inputStream.use { input ->
             FileOutputStream(tempFile).use { output ->
                 var bytesRead: Int
                 while (input.read(buffer).also { bytesRead = it } != -1) {
+                    currentCoroutineContext().ensureActive()
                     copiedBytes += bytesRead
                     if (copiedBytes > RemotePublicationDownloader.MAX_FILE_SIZE_BYTES) {
                         output.flush()
@@ -383,15 +398,20 @@ class LocalImportBookRepository(
                 output.flush()
             }
         }
+        } catch (error: Throwable) {
+            tempFile.delete()
+            throw error
+        }
         return tempFile
     }
 
-    private fun calculateSha256(file: File): String {
+    private suspend fun calculateSha256(file: File): String {
         val digest = MessageDigest.getInstance("SHA-256")
         FileInputStream(file).use { input ->
             val buffer = ByteArray(8192)
             var bytesRead: Int
             while (input.read(buffer).also { bytesRead = it } != -1) {
+                currentCoroutineContext().ensureActive()
                 digest.update(buffer, 0, bytesRead)
             }
         }

@@ -14,8 +14,74 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import okio.buffer
 
 class UrlImporterTest {
+
+    @Test
+    fun `network failures are recoverable and leave no temporary files`() = runBlocking {
+        for (failure in listOf(java.net.UnknownHostException("offline"), java.net.SocketTimeoutException("timeout"), java.io.IOException("connection lost"))) {
+            val client = OkHttpClient.Builder().addInterceptor { throw failure }.build()
+            val result = RemotePublicationDownloader(baseClient = client, cacheDirectory = tempFolder.root)
+                .download("https://example.com/book.pdf")
+            assertTrue(result.exceptionOrNull() is ImportException.DownloadFailed)
+            assertTrue(tempFolder.root.listFiles().orEmpty().isEmpty())
+        }
+    }
+
+    @Test
+    fun `server error can be retried without corrupting the successful file`() = runBlocking {
+        var attempts = 0
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(if (attempts++ == 0) 503 else 200).message("test")
+                .body("%PDF-test".toResponseBody("application/pdf".toMediaType())).build()
+        }.build()
+        val downloader = RemotePublicationDownloader(baseClient = client, cacheDirectory = tempFolder.root)
+        assertTrue(downloader.download("https://example.com/book.pdf").isFailure)
+        assertTrue(tempFolder.root.listFiles().orEmpty().isEmpty())
+        assertEquals("%PDF-test", downloader.download("https://example.com/book.pdf").getOrThrow().tempFile.readText())
+        assertEquals(1, tempFolder.root.listFiles().orEmpty().size)
+    }
+
+    @Test
+    fun `cancelled copy propagates cancellation closes body and removes partial file`() = runBlocking {
+        var closed = false
+        val buffer = okio.Buffer().write(ByteArray(32_768) { 65 })
+        val source = object : okio.ForwardingSource(buffer) {
+            override fun close() { closed = true; super.close() }
+        }
+        val buffered = source.buffer()
+        val body = object : okhttp3.ResponseBody() {
+            override fun contentType() = "application/pdf".toMediaType()
+            override fun contentLength() = 32_768L
+            override fun source() = buffered
+        }
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(200).message("OK").body(body).build()
+        }.build()
+        var cancelled = false
+        try {
+            RemotePublicationDownloader(baseClient = client, cacheDirectory = tempFolder.root)
+                .download("https://example.com/book.pdf") { throw kotlinx.coroutines.CancellationException("test cancellation") }
+        } catch (_: kotlinx.coroutines.CancellationException) { cancelled = true }
+        assertTrue(cancelled)
+        assertTrue(closed)
+        assertTrue(tempFolder.root.listFiles().orEmpty().isEmpty())
+    }
+
+    @Test
+    fun `empty response fails and removes temporary file`() = runBlocking {
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(200).message("OK").body("".toResponseBody(null)).build()
+        }.build()
+        val result = RemotePublicationDownloader(baseClient = client, cacheDirectory = tempFolder.root)
+            .download("https://example.com/empty.pdf")
+        assertTrue(result.exceptionOrNull() is ImportException.FileNotFound)
+        assertTrue(tempFolder.root.listFiles().orEmpty().isEmpty())
+    }
 
     @get:Rule
     val tempFolder = TemporaryFolder()

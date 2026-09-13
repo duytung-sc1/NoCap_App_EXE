@@ -58,6 +58,7 @@ import com.nocap.app.presentation.reader.ColorPickerRow
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import kotlinx.coroutines.flow.sample
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -123,6 +124,7 @@ fun TextDocumentReader(
 
     var document by remember { mutableStateOf<TextDocument?>(null) }
     var isLoading by remember { mutableStateOf(true) }
+    var positionRestored by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     var showControls by remember { mutableStateOf(true) }
@@ -197,13 +199,9 @@ fun TextDocumentReader(
 
                 withContext(Dispatchers.Main) {
                     isLoading = false
-                    if (locator != null && locator.blockIndex > 0) {
-                        scope.launch {
-                            listState.scrollToItem(locator.blockIndex.coerceIn(0, (parsedDoc.blocks.size - 1).coerceAtLeast(0)))
-                        }
-                    }
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
 
                 withContext(Dispatchers.Main) {
                     errorMessage = e.message ?: "Không thể mở tài liệu"
@@ -213,11 +211,25 @@ fun TextDocumentReader(
         }
     }
 
+    // Wait until the list is composed before restoring; never persist its initial zero position.
+    LaunchedEffect(document, isLoading) {
+        val loaded = document ?: return@LaunchedEffect
+        if (isLoading || errorMessage != null) return@LaunchedEffect
+        val locator = savedLocator
+        if (locator != null && loaded.blocks.isNotEmpty()) {
+            listState.scrollToItem(locator.blockIndex.coerceIn(0, loaded.blocks.lastIndex), locator.scrollOffsetPx)
+        }
+        positionRestored = true
+    }
+
     // 2. Track reading progress and save periodically
-    LaunchedEffect(listState, document) {
-        snapshotFlow { listState.firstVisibleItemIndex }
+    @OptIn(kotlinx.coroutines.FlowPreview::class)
+    LaunchedEffect(listState, document, positionRestored) {
+        if (!positionRestored || document == null) return@LaunchedEffect
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
             .distinctUntilChanged()
-            .collect { index ->
+            .sample(500)
+            .collect { (index, offset) ->
                 val totalBlocks = document?.blocks?.size ?: 1
                 val progression = if (totalBlocks > 0) (index.toFloat() / totalBlocks).coerceIn(0f, 1f) else 0f
                 val blockText = document?.blocks?.getOrNull(index)?.plainText?.take(100)
@@ -225,6 +237,7 @@ fun TextDocumentReader(
                 val locator = TextLocator(
                     blockIndex = index,
                     characterOffset = 0,
+                    scrollOffsetPx = offset,
                     progression = progression,
                     snippet = blockText
                 )
@@ -246,10 +259,12 @@ fun TextDocumentReader(
     // Save location immediately on exit
     DisposableEffect(Unit) {
         onDispose {
+            if (!positionRestored || document == null) return@onDispose
             val idx = listState.firstVisibleItemIndex
             val totalBlocks = document?.blocks?.size ?: 1
             val progression = if (totalBlocks > 0) (idx.toFloat() / totalBlocks).coerceIn(0f, 1f) else 0f
-            val locator = TextLocator(blockIndex = idx, characterOffset = 0, progression = progression)
+            val locator = TextLocator(blockIndex = idx, characterOffset = 0, progression = progression,
+                scrollOffsetPx = listState.firstVisibleItemScrollOffset)
             ReadingSessionManager.processScope.launch {
                 db.progressDao().saveProgress(
                     ReadingProgressEntity(

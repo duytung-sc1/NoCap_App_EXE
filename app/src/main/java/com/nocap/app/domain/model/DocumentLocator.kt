@@ -16,6 +16,7 @@ sealed interface DocumentLocator {
                     "TEXT" -> TextLocator(
                         blockIndex = json.optInt("blockIndex", 0),
                         characterOffset = json.optInt("characterOffset", 0),
+                        scrollOffsetPx = json.optInt("scrollOffsetPx", 0).coerceAtLeast(0),
                         progression = json.optDouble("progression", 0.0).toFloat(),
                         snippet = json.optString("snippet").takeIf { it.isNotEmpty() }
                     )
@@ -49,13 +50,15 @@ data class TextLocator(
     val blockIndex: Int = 0,
     val characterOffset: Int = 0,
     override val progression: Float = 0f,
-    val snippet: String? = null
+    val snippet: String? = null,
+    val scrollOffsetPx: Int = 0
 ) : DocumentLocator {
     override fun toJson(): String = JSONObject().apply {
         put("type", "TEXT")
         put("version", 1)
         put("blockIndex", blockIndex)
         put("characterOffset", characterOffset)
+        if (scrollOffsetPx > 0) put("scrollOffsetPx", scrollOffsetPx)
         put("progression", progression.toDouble())
         if (!snippet.isNullOrBlank()) put("snippet", snippet)
     }.toString()

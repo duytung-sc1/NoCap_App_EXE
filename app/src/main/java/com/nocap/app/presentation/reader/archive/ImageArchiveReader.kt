@@ -33,6 +33,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -82,6 +83,8 @@ fun ImageArchiveReader(
 
     var pages by remember { mutableStateOf<List<CbzParser.CbzPage>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
+    var positionRestored by remember { mutableStateOf(false) }
+    var restoredPage by remember { mutableIntStateOf(0) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showControls by remember { mutableStateOf(true) }
     var isBookmarked by remember { mutableStateOf(false) }
@@ -125,11 +128,10 @@ fun ImageArchiveReader(
 
                 withContext(Dispatchers.Main) {
                     isLoading = false
-                    if (locator != null && locator.pageIndex in pageList.indices) {
-                        scope.launch { pagerState.scrollToPage(locator.pageIndex) }
-                    }
+                    restoredPage = locator?.pageIndex?.coerceIn(0, pageList.lastIndex.coerceAtLeast(0)) ?: 0
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 withContext(Dispatchers.Main) {
                     errorMessage = e.message ?: "Không thể mở tệp CBZ"
                     isLoading = false
@@ -138,8 +140,15 @@ fun ImageArchiveReader(
         }
     }
 
+    LaunchedEffect(pages, isLoading) {
+        if (isLoading || pages.isEmpty() || errorMessage != null) return@LaunchedEffect
+        pagerState.scrollToPage(restoredPage)
+        positionRestored = true
+    }
+
     // 2. Track page changes and save progress
-    LaunchedEffect(pagerState, pages) {
+    LaunchedEffect(pagerState, pages, positionRestored) {
+        if (!positionRestored) return@LaunchedEffect
         snapshotFlow { pagerState.currentPage }
             .distinctUntilChanged()
             .collect { pageIdx ->
@@ -169,7 +178,7 @@ fun ImageArchiveReader(
     // Save on dispose
     DisposableEffect(Unit) {
         onDispose {
-            if (pages.isNotEmpty()) {
+            if (positionRestored && pages.isNotEmpty()) {
                 val pageIdx = pagerState.currentPage
                 val currentPage = pages.getOrNull(pageIdx)
                 if (currentPage != null) {
@@ -179,7 +188,7 @@ fun ImageArchiveReader(
                         entryName = currentPage.entryName,
                         progression = progression
                     )
-                    scope.launch(Dispatchers.IO) {
+                    com.nocap.app.domain.session.ReadingSessionManager.processScope.launch {
                         db.progressDao().saveProgress(
                             ReadingProgressEntity(
                                 bookId = book.id,
