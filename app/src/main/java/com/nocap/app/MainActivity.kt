@@ -1,8 +1,6 @@
 package com.nocap.app
 
 import android.content.Intent
-import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -20,6 +18,7 @@ import android.view.KeyEvent
 import kotlinx.coroutines.flow.MutableStateFlow
 
 class MainActivity : FragmentActivity() {
+    private var sharedImportHandled = false
 
     override fun attachBaseContext(newBase: android.content.Context) {
         super.attachBaseContext(AppLanguageManager.wrap(newBase))
@@ -39,7 +38,8 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        handleIntent(intent)
+        sharedImportHandled = savedInstanceState?.getBoolean("shared_import_handled") ?: false
+        if (!sharedImportHandled) handleIntent(intent)
 
         setContent {
             val auth by com.nocap.app.data.auth.CloudAuthRepository.getInstance(this).authState.collectAsStateWithLifecycle()
@@ -57,7 +57,11 @@ class MainActivity : FragmentActivity() {
                     } else androidx.compose.runtime.key(profile) {
                     AppNavHost(
                         pendingImportSource = sharedSource,
-                        onClearPendingImport = { pendingSharedSource.value = null }
+                        onClearPendingImport = {
+                            pendingSharedSource.value = null
+                            sharedImportHandled = true
+                            intent?.markSharedImportHandled()
+                        }
                     )
                     }
                 }
@@ -71,6 +75,11 @@ class MainActivity : FragmentActivity() {
         handleIntent(intent)
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean("shared_import_handled", sharedImportHandled)
+        super.onSaveInstanceState(outState)
+    }
+
     override fun onStart() {
         super.onStart()
         com.nocap.app.data.billing.PlayBilling.get(this).connect()
@@ -78,44 +87,9 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
-        if (intent == null) return
-        val action = intent.action
-        if (action != Intent.ACTION_SEND && action != Intent.ACTION_VIEW) return
-
-        val uri: Uri? = if (intent.hasExtra(Intent.EXTRA_STREAM)) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
-            } else {
-                @Suppress("DEPRECATION")
-                intent.getParcelableExtra(Intent.EXTRA_STREAM)
-            } ?: intent.getStringExtra(Intent.EXTRA_STREAM)?.let { Uri.parse(it) }
-        } else {
-            intent.data
+        readSharedPublicationSource(intent)?.let {
+            sharedImportHandled = false
+            pendingSharedSource.value = it
         }
-
-        if (uri != null) {
-            pendingSharedSource.value = PublicationSource.SharedUri(
-                uri = uri,
-                mimeType = intent.type
-            )
-            intent.removeExtra(Intent.EXTRA_STREAM)
-            return
-        }
-
-        if (intent.hasExtra(Intent.EXTRA_TEXT)) {
-            val text = intent.getStringExtra(Intent.EXTRA_TEXT)
-            if (!text.isNullOrBlank()) {
-                val url = extractHttpsUrl(text)
-                if (url != null) {
-                    pendingSharedSource.value = PublicationSource.SharedUrl(url)
-                    intent.removeExtra(Intent.EXTRA_TEXT)
-                }
-            }
-        }
-    }
-
-    private fun extractHttpsUrl(text: String): String? {
-        val regex = Regex("""https://[^\s]+""", RegexOption.IGNORE_CASE)
-        return regex.find(text)?.value
     }
 }
