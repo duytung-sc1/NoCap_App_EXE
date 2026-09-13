@@ -1437,10 +1437,10 @@ fun EpubNavigatorContainer(
                         servedAssets = servedPaths,
                         selectionActionModeCallback = object : ActionMode.Callback {
                             override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
-                                menu.add(0, 101, 0, "Tô sáng")
-                                menu.add(0, 102, 1, "Ghi chú")
-                                menu.add(0, 103, 2, "Sao chép")
-                                menu.add(0, 104, 3, "Chia sẻ")
+                                menu.add(0, 101, 0, com.nocap.app.core.localization.AppLanguageManager.translate(ctx, "Tô sáng"))
+                                menu.add(0, 102, 1, com.nocap.app.core.localization.AppLanguageManager.translate(ctx, "Ghi chú"))
+                                menu.add(0, 103, 2, com.nocap.app.core.localization.AppLanguageManager.translate(ctx, "Sao chép"))
+                                menu.add(0, 104, 3, com.nocap.app.core.localization.AppLanguageManager.translate(ctx, "Chia sẻ"))
                                 return true
                             }
                             override fun onPrepareActionMode(mode: ActionMode, menu: Menu): Boolean = false

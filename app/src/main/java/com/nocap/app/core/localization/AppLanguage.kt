@@ -9,19 +9,13 @@ import java.util.Locale
 
 enum class AppLanguage(val languageTag: String, val nativeName: String) {
     ENGLISH("en", "English"),
-    VIETNAMESE("vi-VN", "Tiếng Việt"),
-    JAPANESE("ja", "日本語"),
-    SIMPLIFIED_CHINESE("zh-CN", "简体中文"),
-    KOREAN("ko", "한국어");
+    VIETNAMESE("vi-VN", "Tiếng Việt");
 
     val locale: Locale get() = Locale.forLanguageTag(languageTag)
 
     companion object {
         fun fromLanguageTag(value: String?): AppLanguage = when {
             value?.startsWith("vi", ignoreCase = true) == true -> VIETNAMESE
-            value?.startsWith("ja", ignoreCase = true) == true -> JAPANESE
-            value?.startsWith("zh", ignoreCase = true) == true -> SIMPLIFIED_CHINESE
-            value?.startsWith("ko", ignoreCase = true) == true -> KOREAN
             else -> ENGLISH
         }
     }

@@ -6,6 +6,22 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class AppLanguageUnitTest {
+    @Test fun onlyEnglishAndVietnameseAreSelectable() {
+        assertEquals(listOf("en", "vi-VN"), AppLanguage.entries.map { it.languageTag })
+    }
+
+    @Test fun switchingBackAndForthDoesNotRetainPreviousUiLanguage() {
+        val labels = mapOf("Tô sáng" to "Highlights", "Ghi chú" to "Notes",
+            "Ngang" to "Horizontal", "Trang sau" to "Next page", "Thư viện" to "Library")
+        repeat(3) {
+            for ((vi, en) in labels) {
+                assertEquals(en, UiTranslations.translate(vi, AppLanguage.ENGLISH))
+                assertEquals(vi, UiTranslations.translate(vi, AppLanguage.VIETNAMESE))
+            }
+            assertEquals("12 documents", UiTranslations.translate("12 tài liệu", AppLanguage.ENGLISH))
+            assertEquals("12 tài liệu", UiTranslations.translate("12 tài liệu", AppLanguage.VIETNAMESE))
+        }
+    }
     @Test fun libraryFiltersAndSortLabelsAreLocalizedInAllLanguages() {
         val labels = com.nocap.app.core.datastore.LibrarySmartView.entries.map { it.displayName } +
             com.nocap.app.core.datastore.LibrarySort.entries.map { it.displayName } +
@@ -27,17 +43,14 @@ class AppLanguageUnitTest {
     @Test
     fun supportedLanguageTagsAreNormalized() {
         assertEquals(AppLanguage.VIETNAMESE, AppLanguage.fromLanguageTag("vi-VN"))
-        assertEquals(AppLanguage.JAPANESE, AppLanguage.fromLanguageTag("ja-JP"))
-        assertEquals(AppLanguage.SIMPLIFIED_CHINESE, AppLanguage.fromLanguageTag("zh-Hans-CN"))
-        assertEquals(AppLanguage.KOREAN, AppLanguage.fromLanguageTag("ko-KR"))
+        assertEquals(AppLanguage.ENGLISH, AppLanguage.fromLanguageTag("ja-JP"))
+        assertEquals(AppLanguage.ENGLISH, AppLanguage.fromLanguageTag("zh-Hans-CN"))
+        assertEquals(AppLanguage.ENGLISH, AppLanguage.fromLanguageTag("ko-KR"))
     }
 
     @Test
     fun coreNavigationIsAvailableInEverySupportedLanguage() {
         assertEquals("Home", UiTranslations.translate("Trang chủ", AppLanguage.ENGLISH))
-        assertEquals("ホーム", UiTranslations.translate("Trang chủ", AppLanguage.JAPANESE))
-        assertEquals("首页", UiTranslations.translate("Trang chủ", AppLanguage.SIMPLIFIED_CHINESE))
-        assertEquals("홈", UiTranslations.translate("Trang chủ", AppLanguage.KOREAN))
         assertEquals("Trang chủ", UiTranslations.translate("Trang chủ", AppLanguage.VIETNAMESE))
     }
 
@@ -45,6 +58,6 @@ class AppLanguageUnitTest {
     fun unknownUserContentIsNeverMachineTranslated() {
         val userNote = "Một ghi chú riêng của người dùng"
         assertEquals(userNote, UiTranslations.translate(userNote, AppLanguage.ENGLISH))
-        assertEquals(userNote, UiTranslations.translate(userNote, AppLanguage.JAPANESE))
+        assertEquals(userNote, UiTranslations.translate(userNote, AppLanguage.VIETNAMESE))
     }
 }
