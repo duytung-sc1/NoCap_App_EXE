@@ -59,14 +59,21 @@ object CbzParser {
     }
 
     fun extractPageToFile(cbzFile: File, entryName: String, targetFile: File) {
-        ZipFile(cbzFile).use { zip ->
-            val entry = zip.getEntry(entryName)
-                ?: throw IllegalArgumentException("Không tìm thấy trang $entryName trong tệp CBZ")
-            zip.getInputStream(entry).use { input ->
-                targetFile.outputStream().use { output ->
-                    input.copyTo(output)
+        val temporary = File.createTempFile("page-", ".tmp", targetFile.parentFile)
+        try {
+            ZipFile(cbzFile).use { zip ->
+                val entry = zip.getEntry(entryName)
+                    ?: throw IllegalArgumentException("Không tìm thấy trang $entryName trong tệp CBZ")
+                zip.getInputStream(entry).use { input ->
+                    temporary.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
                 }
             }
+            check(temporary.length() > 0L) { "Trang ảnh không có nội dung" }
+            java.nio.file.Files.move(temporary.toPath(), targetFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+        } finally {
+            temporary.delete()
         }
     }
 

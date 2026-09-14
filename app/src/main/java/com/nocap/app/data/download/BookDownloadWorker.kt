@@ -55,6 +55,7 @@ class BookDownloadWorker(
         val tempDir = File(profileFiles, "temp").apply { if (!exists()) mkdirs() }
         val tempFile = File(tempDir, "$bookId.tmp")
         val targetFile = File(booksDir, "$bookId.epub")
+        var response: okhttp3.Response? = null
 
         try {
             // 1. Update status to DOWNLOADING in Room
@@ -85,12 +86,13 @@ class BookDownloadWorker(
                 .header("User-Agent", "EbookReaderApp/1.0")
                 .build()
 
-            val response = okHttpClient.newCall(request).execute()
-            if (!response.isSuccessful) {
-                throw IllegalStateException("Không tải được sách (mã lỗi ${response.code})")
+            val received = okHttpClient.newCall(request).execute()
+            response = received
+            if (!received.isSuccessful) {
+                throw IllegalStateException("Không tải được sách (mã lỗi ${received.code})")
             }
 
-            val body = response.body ?: throw IllegalStateException("Máy chủ trả về nội dung trống")
+            val body = received.body ?: throw IllegalStateException("Máy chủ trả về nội dung trống")
             val contentLength = body.contentLength()
             val totalBytes = if (contentLength > 0) contentLength else expectedSize
 
@@ -139,9 +141,7 @@ class BookDownloadWorker(
             }
 
             // 3. Validation: Content-Length check
-            if (contentLength > 0 && downloadedBytes != contentLength) {
-                throw IllegalStateException("Tệp tải về không đầy đủ. Vui lòng tải lại.")
-            }
+            DownloadIntegrity.verifySize(downloadedBytes, contentLength)
 
             // 4. Validation: SHA-256 Hash check
             val computedHash = digest.digest().joinToString("") { "%02x".format(it) }
@@ -182,6 +182,7 @@ class BookDownloadWorker(
             if (tempFile.exists()) {
                 tempFile.delete()
             }
+            if (e is kotlinx.coroutines.CancellationException) throw e
             val finalStatus = if (isStopped) DownloadStatus.CANCELLED else DownloadStatus.FAILED
             downloadDao.upsertDownload(
                 DownloadedBookEntity(
@@ -198,6 +199,8 @@ class BookDownloadWorker(
                 )
             )
             Result.failure()
+        } finally {
+            response?.close()
         }
     }
 }

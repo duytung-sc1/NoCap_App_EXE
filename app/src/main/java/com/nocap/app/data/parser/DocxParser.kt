@@ -76,10 +76,10 @@ object DocxParser {
                 while (mediaEntries.hasMoreElements()) {
                     val entry = mediaEntries.nextElement()
                     if (entry.name.startsWith("word/media/") && !entry.isDirectory) {
-                        val imgFile = File(cacheDir, "docx_img_${System.currentTimeMillis()}_${File(entry.name).name}")
+                        val imgFile = File(cacheDir, "docx_${DocumentCacheKey.forFile(file, entry.name)}.${File(entry.name).extension}")
                         try {
-                            zip.getInputStream(entry).use { input ->
-                                imgFile.outputStream().use { output -> input.copyTo(output) }
+                            if (!imgFile.isFile || imgFile.length() == 0L) {
+                                CbzParser.extractPageToFile(file, entry.name, imgFile)
                             }
                             imageMap[entry.name] = imgFile.absolutePath
                         } catch (_: Exception) {}
@@ -88,6 +88,25 @@ object DocxParser {
             }
 
             // 3. Parse word/document.xml
+            val imageRelationships = mutableMapOf<String, String>()
+            zip.getEntry("word/_rels/document.xml.rels")?.let { relationships ->
+                zip.getInputStream(relationships).use { stream ->
+                    val relParser = newPullParser()
+                    relParser.setInput(stream, "UTF-8")
+                    var event = relParser.eventType
+                    while (event != XmlPullParser.END_DOCUMENT) {
+                        if (event == XmlPullParser.START_TAG && relParser.name.substringAfter(':') == "Relationship") {
+                            val id = relParser.getAttributeValue(null, "Id")
+                            val target = relParser.getAttributeValue(null, "Target")
+                            val external = relParser.getAttributeValue(null, "TargetMode").equals("External", true)
+                            if (id != null && target != null && !external && !ZipSecurityUtils.isPathTraversal(target)) {
+                                imageMap["word/$target"]?.let { imageRelationships[id] = it }
+                            }
+                        }
+                        event = relParser.next()
+                    }
+                }
+            }
             val docEntry = zip.getEntry("word/document.xml")
                 ?: throw IllegalArgumentException("Không tìm thấy word/document.xml trong tệp DOCX")
 
@@ -184,13 +203,12 @@ object DocxParser {
                                         }
                                     }
                                 }
-                                "drawing", "w:drawing" -> {
-                                    // Embedded shape or image
-                                    if (imageMap.isNotEmpty()) {
-                                        val firstImg = imageMap.values.firstOrNull()
-                                        if (firstImg != null) {
-                                            blocks.add(TextDocumentBlock.ImageBlock(firstImg, "Hình ảnh trong tài liệu"))
-                                        }
+                                "blip", "a:blip" -> {
+                                    val embeddedId = (0 until parser.attributeCount).firstOrNull {
+                                        parser.getAttributeName(it).substringAfter(':') == "embed"
+                                    }?.let { parser.getAttributeValue(it) }
+                                    imageRelationships[embeddedId]?.let { path ->
+                                        blocks.add(TextDocumentBlock.ImageBlock(path, "Hình ảnh trong tài liệu"))
                                     }
                                 }
                                 "object", "w:object", "smartTag", "w:smartTag" -> {

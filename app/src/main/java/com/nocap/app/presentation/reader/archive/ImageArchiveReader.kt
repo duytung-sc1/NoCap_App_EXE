@@ -225,15 +225,16 @@ fun ImageArchiveReader(
                 val page = pages[pageIdx]
                 var pageFile by remember { mutableStateOf<File?>(null) }
 
-                LaunchedEffect(page.entryName) {
+                LaunchedEffect(file, book.contentVersion, page.entryName) {
                     withContext(Dispatchers.IO) {
-                        val cacheFile = File(context.cacheDir, "cbz_page_${book.id}_$pageIdx.jpg")
-                        if (!cacheFile.exists()) {
+                        val cacheKey = com.nocap.app.data.parser.DocumentCacheKey.forFile(file, page.entryName, "${book.contentVersion}:${book.contentHash}")
+                        val cacheFile = File(context.cacheDir, "cbz_$cacheKey.jpg")
+                        if (!cacheFile.isFile || cacheFile.length() == 0L) {
                             try {
                                 CbzParser.extractPageToFile(file, page.entryName, cacheFile)
                             } catch (_: Exception) {}
                         }
-                        pageFile = cacheFile
+                        pageFile = cacheFile.takeIf { it.isFile && it.length() > 0L }
                     }
                 }
 

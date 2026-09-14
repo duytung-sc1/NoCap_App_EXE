@@ -56,7 +56,8 @@ class LocalBookDownloadRepository(
         }
 
         // Fetch catalog book info
-        val book = catalogRepository.getBookById(bookId)
+        val book = catalogRepository.getBookById(bookId) ?: catalogDao.getBookById(bookId)?.toDomain()
+        require(book != null && book.fileUrl.isNotBlank()) { "Sách chưa có liên kết tải" }
         if (catalogDao.getBookById(bookId) == null) {
             if (book != null) {
                 // Ensure category and book exist in database for foreign key constraint

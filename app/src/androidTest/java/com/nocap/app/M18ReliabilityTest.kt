@@ -34,6 +34,10 @@ class M18ReliabilityTest {
             val source = File(root, "remove.txt").apply { writeText("Remove download fixture") }
             val id = repo.importPublication(PublicationSource.LocalUri(Uri.fromFile(source))).getOrThrow()
             val saved = db.downloadDao().getDownloadByBookId(id)!!
+            try { downloads.startDownload(id); fail("Missing download URL accepted") }
+            catch (_: IllegalArgumentException) { }
+            assertEquals(saved, db.downloadDao().getDownloadByBookId(id))
+            assertTrue(File(saved.localFilePath).exists())
             val outside = File(root, "other-profile.txt").apply { writeText("Protected") }
             db.downloadDao().upsertDownload(saved.copy(localFilePath = outside.path))
             try { downloads.deleteDownloadedBook(id); fail("Foreign path accepted") }
