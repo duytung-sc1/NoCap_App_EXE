@@ -100,9 +100,28 @@ class M18ReliabilityTest {
             val file = File(root, "rollback.txt").apply { writeText("A real document for atomic import testing.") }
             assertTrue(repo.importPublication(PublicationSource.LocalUri(Uri.fromFile(file))).isFailure)
             assertTrue(db.catalogDao().getAllBooks().isEmpty())
+            assertTrue("Failed import must not leave a permanent document", File(root, "files/imported").listFiles().orEmpty().isEmpty())
             db.openHelper.writableDatabase.execSQL("DROP TRIGGER m18_fail")
             assertTrue(repo.importPublication(PublicationSource.LocalUri(Uri.fromFile(file))).isSuccess)
             assertEquals(1, db.catalogDao().getAllBooks().size)
+        }
+    }
+
+    @Test fun importedDeletionRejectsForeignPathAndPreservesMetadata() = runBlocking(Dispatchers.IO) {
+        isolated { db, repo, root ->
+            val source = File(root, "delete.txt").apply { writeText("Document deletion fixture") }
+            val id = repo.importPublication(PublicationSource.LocalUri(Uri.fromFile(source))).getOrThrow()
+            val download = db.downloadDao().getDownloadByBookId(id)!!
+            val foreign = File(root, "private.txt").apply { writeText("Must remain safe") }
+            db.downloadDao().upsertDownload(download.copy(localFilePath = foreign.path))
+            assertTrue(repo.deleteImportedBook(id).isFailure)
+            assertEquals("Must remain safe", foreign.readText())
+            assertNotNull(db.catalogDao().getBookById(id))
+            assertTrue(File(download.localFilePath).exists())
+            db.downloadDao().upsertDownload(download)
+            assertTrue(repo.deleteImportedBook(id).isSuccess)
+            assertFalse(File(download.localFilePath).exists())
+            assertNull(db.catalogDao().getBookById(id))
         }
     }
 

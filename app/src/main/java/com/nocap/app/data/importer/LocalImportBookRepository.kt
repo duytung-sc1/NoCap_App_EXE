@@ -63,6 +63,8 @@ class LocalImportBookRepository(
         onProgress: ((DownloadProgress) -> Unit)?
     ): Result<String> = importLock.withLock { withContext(Dispatchers.IO) {
         var tempFile: File? = null
+        val createdFiles = mutableListOf<File>()
+        var committed = false
         try {
             var suggestedFilename: String? = null
             var sourceMimeType: String? = null
@@ -219,6 +221,7 @@ class LocalImportBookRepository(
             val bookId = "imported_${sha256.take(12)}"
             val ext = FormatSniffer.extensionFor(format)
             val finalFile = File(importedDir, "$bookId.$ext")
+            createdFiles.add(finalFile)
 
             if (finalFile.exists()) {
                 finalFile.delete()
@@ -239,6 +242,7 @@ class LocalImportBookRepository(
             } else if (format == PublicationFormat.CBZ) {
                 val coversDir = File(profileFiles, "covers").apply { if (!exists()) mkdirs() }
                 val coverFile = File(coversDir, "$bookId.jpg")
+                createdFiles.add(coverFile)
                 if (CbzParser.extractFirstPageThumbnail(finalFile, coverFile)) {
                     customCoverPath = coverFile.absolutePath
                 }
@@ -312,14 +316,19 @@ class LocalImportBookRepository(
             )
 
             currentCoroutineContext().ensureActive()
-            database.withTransaction {
-                catalogDao.insertBook(catalogEntity)
-                downloadDao.upsertDownload(downloadEntity)
+            // Finish the atomic commit before cancellation can trigger file cleanup.
+            withContext(kotlinx.coroutines.NonCancellable) {
+                database.withTransaction {
+                    catalogDao.insertBook(catalogEntity)
+                    downloadDao.upsertDownload(downloadEntity)
+                }
+                committed = true
             }
 
             Result.success(bookId)
         } catch (e: Exception) {
             tempFile?.delete()
+            if (!committed) createdFiles.forEach { it.delete() }
             if (e is CancellationException) throw e
             if (e is ImportException) {
                 Result.failure(e)
@@ -333,10 +342,7 @@ class LocalImportBookRepository(
         runCatching {
             val download = downloadDao.getDownloadByBookId(bookId)
             if (download != null && download.localFilePath.isNotBlank()) {
-                val file = File(download.localFilePath)
-                if (file.exists()) {
-                    file.delete()
-                }
+                ManagedDocumentFiles.delete(profileFiles, download.localFilePath)
             }
 
             bookmarkDao.deleteBookmarksByBookId(bookId)
