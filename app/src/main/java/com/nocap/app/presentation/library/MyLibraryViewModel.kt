@@ -589,7 +589,13 @@ class MyLibraryViewModel(
     // Import / Delete / Favorite / Updates
     fun onRemoveDownload(bookId: String) {
         viewModelScope.launch {
-            downloadRepository.deleteDownloadedBook(bookId)
+            try {
+                downloadRepository.deleteDownloadedBook(bookId)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                _events.emit(LibraryEvent.ShowMessage("Không thể xóa tài liệu"))
+            }
         }
     }
 

@@ -24,6 +24,31 @@ import kotlin.system.measureTimeMillis
 /** Generated fixtures and an isolated in-memory DB; never touches an account or backend. */
 @RunWith(AndroidJUnit4::class)
 class M18ReliabilityTest {
+    @Test fun removeDownloadUsesStoredPathAndRejectsForeignFiles() = runBlocking(Dispatchers.IO) {
+        isolated { db, repo, root ->
+            val context = object : ContextWrapper(InstrumentationRegistry.getInstrumentation().targetContext) {
+                override fun getFilesDir() = File(root, "files")
+            }
+            val downloads = com.nocap.app.data.download.LocalBookDownloadRepository(context,
+                db.downloadDao(), db.catalogDao(), com.nocap.app.data.catalog.LocalCatalogRepository())
+            val source = File(root, "remove.txt").apply { writeText("Remove download fixture") }
+            val id = repo.importPublication(PublicationSource.LocalUri(Uri.fromFile(source))).getOrThrow()
+            val saved = db.downloadDao().getDownloadByBookId(id)!!
+            val outside = File(root, "other-profile.txt").apply { writeText("Protected") }
+            db.downloadDao().upsertDownload(saved.copy(localFilePath = outside.path))
+            try { downloads.deleteDownloadedBook(id); fail("Foreign path accepted") }
+            catch (_: IllegalArgumentException) { }
+            assertEquals("Protected", outside.readText())
+            assertNotNull(db.downloadDao().getDownloadByBookId(id))
+            db.downloadDao().upsertDownload(saved)
+            downloads.deleteDownloadedBook(id)
+            assertFalse(File(saved.localFilePath).exists())
+            assertNull(db.downloadDao().getDownloadByBookId(id))
+            assertNotNull(db.catalogDao().getBookById(id))
+            try { downloads.cancelDownload("../../outside"); fail("Traversal accepted") }
+            catch (_: IllegalArgumentException) { }
+        }
+    }
     @Test fun concurrentReaderBookmarksDedupeWithoutCrossingBooksOrTombstones() = runBlocking(Dispatchers.IO) {
         isolated { db, repo, root ->
             val first = File(root, "bookmarks.txt").apply { writeText("Bookmark concurrency fixture") }

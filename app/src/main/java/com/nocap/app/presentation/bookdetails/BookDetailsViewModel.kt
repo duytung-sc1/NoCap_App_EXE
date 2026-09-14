@@ -134,7 +134,13 @@ class BookDetailsViewModel(
 
     fun onDeleteDownload() {
         viewModelScope.launch {
-            downloadRepository.deleteDownloadedBook(bookId)
+            try {
+                downloadRepository.deleteDownloadedBook(bookId)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                downloadError.value = "Không thể xóa tài liệu"
+            }
         }
     }
 

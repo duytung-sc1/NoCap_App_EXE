@@ -115,6 +115,7 @@ class LocalBookDownloadRepository(
     }
 
     override suspend fun cancelDownload(bookId: String) {
+        require(com.nocap.app.core.util.DocumentIds.isSafe(bookId)) { "Mã tài liệu không hợp lệ" }
         workManager.cancelUniqueWork("download_${com.nocap.app.data.sync.Profiles.key(profile)}_$bookId")
 
         // Clean up temp file
@@ -140,12 +141,13 @@ class LocalBookDownloadRepository(
     }
 
     override suspend fun deleteDownloadedBook(bookId: String) {
+        require(com.nocap.app.core.util.DocumentIds.isSafe(bookId)) { "Mã tài liệu không hợp lệ" }
+        val existing = downloadDao.getDownloadByBookId(bookId)
+        // Validate before cancelling or changing metadata; never delete a foreign profile file.
+        val path = existing?.localFilePath?.takeIf { it.isNotBlank() }
+        if (path != null) com.nocap.app.data.importer.ManagedDocumentFiles.resolve(profileFiles, path)
         cancelDownload(bookId)
-
-        val targetFile = File(File(profileFiles, "books"), "$bookId.epub")
-        if (targetFile.exists()) {
-            targetFile.delete()
-        }
+        if (path != null) com.nocap.app.data.importer.ManagedDocumentFiles.delete(profileFiles, path)
 
         downloadDao.deleteDownload(bookId)
     }
