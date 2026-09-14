@@ -9,6 +9,14 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface BookmarkDao {
+    @androidx.room.Transaction
+    suspend fun insertReaderBookmarkIfAbsent(bookmark: BookmarkEntity) {
+        val position = com.nocap.app.domain.model.DocumentLocator.fromJson(bookmark.locatorJson)
+        if (position != null && getBookmarksForBook(bookmark.bookId).any {
+                com.nocap.app.domain.model.ReaderBookmarkPosition.matches(it.locatorJson, position)
+            }) return
+        insertBookmark(bookmark)
+    }
     @Query("SELECT * FROM bookmarks WHERE book_id = :bookId AND is_deleted = 0 ORDER BY created_at DESC")
     fun observeBookmarksForBook(bookId: String): Flow<List<BookmarkEntity>>
 

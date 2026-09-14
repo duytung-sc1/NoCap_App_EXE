@@ -31,6 +31,7 @@ import com.nocap.app.core.localization.Text
 import com.nocap.app.core.localization.localize
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableIntStateOf
@@ -87,14 +88,14 @@ fun ImageArchiveReader(
     var restoredPage by remember { mutableIntStateOf(0) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showControls by remember { mutableStateOf(true) }
-    var isBookmarked by remember { mutableStateOf(false) }
+    val readerBookmarks by remember(book.id) { db.bookmarkDao().observeBookmarksForBook(book.id) }.collectAsState(initial = emptyList())
 
     val pagerState = rememberPagerState(pageCount = { pages.size })
 
     DisposableEffect(Unit) {
         onDispose {
             val total = pages.size
-            val prog = if (total > 0) (pagerState.currentPage.toFloat() / total).coerceIn(0f, 1f) else 0f
+            val prog = if (total > 0) ((pagerState.currentPage + 1).toFloat() / total).coerceIn(0f, 1f) else 0f
             sessionId?.let { sId ->
                 sessionManager.endSessionAsync(sId, prog)
             }
@@ -121,11 +122,6 @@ fun ImageArchiveReader(
                     format = book.format.name,
                     startProgress = locator?.progression ?: 0f
                 )
-
-                val bms = db.bookmarkDao().getBookmarksForBook(book.id)
-
-                isBookmarked = bms.isNotEmpty()
-
                 withContext(Dispatchers.Main) {
                     isLoading = false
                     restoredPage = locator?.pageIndex?.coerceIn(0, pageList.lastIndex.coerceAtLeast(0)) ?: 0
@@ -323,7 +319,7 @@ fun ImageArchiveReader(
                                     progression = (currentIdx + 1).toFloat() / pages.size
                                 )
                                 scope.launch(Dispatchers.IO) {
-                                    db.bookmarkDao().insertBookmark(
+                                    db.bookmarkDao().insertReaderBookmarkIfAbsent(
                                         BookmarkEntity(
                                             id = UUID.randomUUID().toString(),
                                             bookId = book.id,
@@ -332,14 +328,13 @@ fun ImageArchiveReader(
                                             snippet = page.fileName
                                         )
                                     )
-                                    isBookmarked = true
                                 }
                             }
                         }) {
                             Icon(
-                                imageVector = if (isBookmarked) AppIcons.Bookmark else AppIcons.BookmarkBorder,
+                                imageVector = if (readerBookmarks.any { com.nocap.app.domain.model.ReaderBookmarkPosition.matches(it.locatorJson, ArchiveLocator(pageIndex = pagerState.currentPage)) }) AppIcons.Bookmark else AppIcons.BookmarkBorder,
                                 contentDescription = localize("Đánh dấu trang"),
-                                tint = if (isBookmarked) MaterialTheme.colorScheme.primary else Color.White
+                                tint = if (readerBookmarks.any { com.nocap.app.domain.model.ReaderBookmarkPosition.matches(it.locatorJson, ArchiveLocator(pageIndex = pagerState.currentPage)) }) MaterialTheme.colorScheme.primary else Color.White
                             )
                         }
                     },

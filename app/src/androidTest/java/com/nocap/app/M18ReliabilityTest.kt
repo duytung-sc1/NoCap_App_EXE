@@ -24,6 +24,26 @@ import kotlin.system.measureTimeMillis
 /** Generated fixtures and an isolated in-memory DB; never touches an account or backend. */
 @RunWith(AndroidJUnit4::class)
 class M18ReliabilityTest {
+    @Test fun concurrentReaderBookmarksDedupeWithoutCrossingBooksOrTombstones() = runBlocking(Dispatchers.IO) {
+        isolated { db, repo, root ->
+            val first = File(root, "bookmarks.txt").apply { writeText("Bookmark concurrency fixture") }
+            val bookId = repo.importPublication(PublicationSource.LocalUri(Uri.fromFile(first))).getOrThrow()
+            val locator = com.nocap.app.domain.model.TextLocator(blockIndex = 4, scrollOffsetPx = 650).toJson()
+            fun bookmark(id: String = bookId) = com.nocap.app.core.database.entity.BookmarkEntity(
+                id = UUID.randomUUID().toString(), bookId = id, locatorJson = locator, chapterTitle = "Fixture")
+            coroutineScope { (1..20).map { async { db.bookmarkDao().insertReaderBookmarkIfAbsent(bookmark()) } }.awaitAll() }
+            val saved = db.bookmarkDao().getBookmarksForBook(bookId).single()
+            assertEquals(650, com.nocap.app.domain.model.TextLocator.fromJson(saved.locatorJson)!!.scrollOffsetPx)
+            val second = File(root, "other.txt").apply { writeText("Other document") }
+            val secondId = repo.importPublication(PublicationSource.LocalUri(Uri.fromFile(second))).getOrThrow()
+            db.bookmarkDao().insertReaderBookmarkIfAbsent(bookmark(secondId))
+            assertEquals(1, db.bookmarkDao().getBookmarksForBook(secondId).size)
+            db.bookmarkDao().softDeleteBookmark(saved.id)
+            db.bookmarkDao().insertReaderBookmarkIfAbsent(bookmark())
+            assertEquals(1, db.bookmarkDao().getBookmarksForBook(bookId).size)
+            assertNotEquals(saved.id, db.bookmarkDao().getBookmarksForBook(bookId).single().id)
+        }
+    }
     private suspend fun isolated(test: suspend (AppDatabase, LocalImportBookRepository, File) -> Unit) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val base = instrumentation.targetContext

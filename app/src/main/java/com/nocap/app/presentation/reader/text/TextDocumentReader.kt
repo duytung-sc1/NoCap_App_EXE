@@ -56,6 +56,7 @@ import com.nocap.app.data.review.LocalReviewRepository
 import com.nocap.app.domain.session.ReadingSessionManager
 import com.nocap.app.presentation.reader.ColorPickerRow
 
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import kotlinx.coroutines.flow.sample
@@ -135,7 +136,7 @@ fun TextDocumentReader(
     var fontSizeSp by remember { mutableFloatStateOf(16f) }
     var theme by remember { mutableStateOf(ReaderTheme.LIGHT) }
 
-    var isBookmarked by remember { mutableStateOf(false) }
+    val readerBookmarks by remember(book.id) { db.bookmarkDao().observeBookmarksForBook(book.id) }.collectAsState(initial = emptyList())
     var savedLocator by remember { mutableStateOf<TextLocator?>(null) }
 
     // Search state
@@ -192,10 +193,6 @@ fun TextDocumentReader(
                 if (book.readingStatus == DocumentReadingStatus.UNREAD) {
                     db.catalogDao().updateReadingStatus(book.id, DocumentReadingStatus.READING)
                 }
-
-                // Check bookmark
-                val bms = db.bookmarkDao().getBookmarksForBook(book.id)
-                isBookmarked = bms.isNotEmpty()
 
                 withContext(Dispatchers.Main) {
                     isLoading = false
@@ -398,9 +395,10 @@ fun TextDocumentReader(
                         IconButton(onClick = {
                             val currentIdx = listState.firstVisibleItemIndex
                             val blockText = doc.blocks.getOrNull(currentIdx)?.plainText?.take(100) ?: ""
-                            val locator = TextLocator(blockIndex = currentIdx, characterOffset = 0, snippet = blockText)
+                            val locator = TextLocator(blockIndex = currentIdx, characterOffset = 0, snippet = blockText,
+                                scrollOffsetPx = listState.firstVisibleItemScrollOffset)
                             scope.launch(Dispatchers.IO) {
-                                db.bookmarkDao().insertBookmark(
+                                db.bookmarkDao().insertReaderBookmarkIfAbsent(
                                     BookmarkEntity(
                                         id = UUID.randomUUID().toString(),
                                         bookId = book.id,
@@ -409,13 +407,12 @@ fun TextDocumentReader(
                                         snippet = blockText
                                     )
                                 )
-                                isBookmarked = true
                             }
                         }) {
                             Icon(
-                                imageVector = if (isBookmarked) AppIcons.Bookmark else AppIcons.BookmarkBorder,
+                                imageVector = if (readerBookmarks.any { com.nocap.app.domain.model.ReaderBookmarkPosition.matches(it.locatorJson, TextLocator(blockIndex = listState.firstVisibleItemIndex)) }) AppIcons.Bookmark else AppIcons.BookmarkBorder,
                                 contentDescription = localize("Đánh dấu"),
-                                tint = if (isBookmarked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                tint = if (readerBookmarks.any { com.nocap.app.domain.model.ReaderBookmarkPosition.matches(it.locatorJson, TextLocator(blockIndex = listState.firstVisibleItemIndex)) }) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                             )
                         }
                         // Settings
