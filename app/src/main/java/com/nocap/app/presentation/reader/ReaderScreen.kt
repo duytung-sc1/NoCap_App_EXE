@@ -10,6 +10,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
+import android.net.Uri
 import android.view.ActionMode
 import android.view.KeyEvent
 import android.view.Menu
@@ -144,6 +145,7 @@ import org.readium.r2.navigator.preferences.FontFamily
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.util.Url
+import org.readium.r2.shared.util.AbsoluteUrl
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -1484,6 +1486,18 @@ fun EpubNavigatorContainer(
                     activity.supportFragmentManager.fragmentFactory = factory.createFragmentFactory(
                         initialLocator = initialLocator,
                         initialPreferences = initialPreferences,
+                        listener = object : EpubNavigatorFragment.Listener {
+                            override fun onExternalLinkActivated(url: AbsoluteUrl) {
+                                val uri = Uri.parse(url.toString())
+                                if (uri.scheme?.lowercase() in setOf("http", "https", "mailto")) {
+                                    runCatching {
+                                        ctx.startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                    }.onFailure {
+                                        Toast.makeText(ctx, "Không tìm thấy ứng dụng để mở liên kết", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                        },
                         configuration = config
                     )
                     val fragment = activity.supportFragmentManager.fragmentFactory.instantiate(

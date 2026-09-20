@@ -29,7 +29,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -41,6 +41,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import com.nocap.app.core.localization.Text
@@ -62,7 +63,6 @@ import androidx.compose.runtime.DisposableEffect
 import kotlinx.coroutines.flow.sample
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -75,13 +75,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -90,6 +95,10 @@ import com.nocap.app.core.database.AppDatabase
 import com.nocap.app.core.database.entity.BookmarkEntity
 import com.nocap.app.core.database.entity.ReadingProgressEntity
 import com.nocap.app.core.datastore.ReaderTheme
+import com.nocap.app.core.datastore.ReaderFontFamily
+import com.nocap.app.core.datastore.ReaderPreferences
+import com.nocap.app.core.datastore.ReaderPreferencesDataStore
+import com.nocap.app.core.datastore.ReaderTextAlignment
 import com.nocap.app.core.designsystem.AppIcons
 import com.nocap.app.data.parser.DocxParser
 import com.nocap.app.data.parser.HtmlSanitizerParser
@@ -109,6 +118,15 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
 
+private const val TEXT_READER_HEADER_ITEMS = 1
+
+private data class TextSelection(
+    val blockIndex: Int,
+    val startOffset: Int,
+    val endOffset: Int,
+    val text: String
+)
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun TextDocumentReader(
@@ -118,8 +136,11 @@ fun TextDocumentReader(
     onBackClick: () -> Unit
 ) {
     val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
     val scope = rememberCoroutineScope()
     val db = remember { AppDatabase.getInstance(context) }
+    val preferencesStore = remember { ReaderPreferencesDataStore(context.applicationContext) }
+    val preferences by preferencesStore.readerPreferences.collectAsState(initial = ReaderPreferences())
     val sessionManager = remember { ReadingSessionManager.getInstance(context.applicationContext) }
     var sessionId by remember { mutableStateOf<String?>(null) }
 
@@ -131,12 +152,10 @@ fun TextDocumentReader(
     var showControls by remember { mutableStateOf(true) }
     var showSettingsSheet by remember { mutableStateOf(false) }
     var showSearchSheet by remember { mutableStateOf(false) }
-    var selectedBlockForNote by remember { mutableStateOf<Pair<Int, TextDocumentBlock>?>(null) }
-
-    var fontSizeSp by remember { mutableFloatStateOf(16f) }
-    var theme by remember { mutableStateOf(ReaderTheme.LIGHT) }
+    var selectedTextForNote by remember { mutableStateOf<TextSelection?>(null) }
 
     val readerBookmarks by remember(book.id) { db.bookmarkDao().observeBookmarksForBook(book.id) }.collectAsState(initial = emptyList())
+    val readerHighlights by remember(book.id) { db.highlightDao().observeHighlightsForBook(book.id) }.collectAsState(initial = emptyList())
     var savedLocator by remember { mutableStateOf<TextLocator?>(null) }
 
     // Search state
@@ -149,7 +168,8 @@ fun TextDocumentReader(
     DisposableEffect(Unit) {
         onDispose {
             val total = document?.blocks?.size ?: 1
-            val finalProg = if (total > 0) (listState.firstVisibleItemIndex.toFloat() / total).coerceIn(0f, 1f) else 0f
+            val blockIndex = (listState.firstVisibleItemIndex - TEXT_READER_HEADER_ITEMS).coerceAtLeast(0)
+            val finalProg = if (total > 0) (blockIndex.toFloat() / total).coerceIn(0f, 1f) else 0f
             sessionId?.let { sId ->
                 sessionManager.endSessionAsync(sId, finalProg)
             }
@@ -157,7 +177,7 @@ fun TextDocumentReader(
     }
 
     // Colors according to theme
-    val (backgroundColor, textColor) = when (theme) {
+    val (backgroundColor, textColor) = when (preferences.theme) {
         ReaderTheme.LIGHT -> Color(0xFFFFFFFF) to Color(0xFF1C1B1F)
         ReaderTheme.DARK -> Color(0xFF121212) to Color(0xFFE6E1E5)
         ReaderTheme.SEPIA -> Color(0xFFF4ECD8) to Color(0xFF5B4636)
@@ -214,7 +234,10 @@ fun TextDocumentReader(
         if (isLoading || errorMessage != null) return@LaunchedEffect
         val locator = savedLocator
         if (locator != null && loaded.blocks.isNotEmpty()) {
-            listState.scrollToItem(locator.blockIndex.coerceIn(0, loaded.blocks.lastIndex), locator.scrollOffsetPx)
+            listState.scrollToItem(
+                locator.blockIndex.coerceIn(0, loaded.blocks.lastIndex) + TEXT_READER_HEADER_ITEMS,
+                locator.scrollOffsetPx
+            )
         }
         positionRestored = true
     }
@@ -228,11 +251,12 @@ fun TextDocumentReader(
             .sample(500)
             .collect { (index, offset) ->
                 val totalBlocks = document?.blocks?.size ?: 1
-                val progression = if (totalBlocks > 0) (index.toFloat() / totalBlocks).coerceIn(0f, 1f) else 0f
-                val blockText = document?.blocks?.getOrNull(index)?.plainText?.take(100)
+                val blockIndex = (index - TEXT_READER_HEADER_ITEMS).coerceAtLeast(0)
+                val progression = if (totalBlocks > 0) (blockIndex.toFloat() / totalBlocks).coerceIn(0f, 1f) else 0f
+                val blockText = document?.blocks?.getOrNull(blockIndex)?.plainText?.take(100)
 
                 val locator = TextLocator(
-                    blockIndex = index,
+                    blockIndex = blockIndex,
                     characterOffset = 0,
                     scrollOffsetPx = offset,
                     progression = progression,
@@ -257,7 +281,7 @@ fun TextDocumentReader(
     DisposableEffect(Unit) {
         onDispose {
             if (!positionRestored || document == null) return@onDispose
-            val idx = listState.firstVisibleItemIndex
+            val idx = (listState.firstVisibleItemIndex - TEXT_READER_HEADER_ITEMS).coerceAtLeast(0)
             val totalBlocks = document?.blocks?.size ?: 1
             val progression = if (totalBlocks > 0) (idx.toFloat() / totalBlocks).coerceIn(0f, 1f) else 0f
             val locator = TextLocator(blockIndex = idx, characterOffset = 0, progression = progression,
@@ -329,6 +353,9 @@ fun TextDocumentReader(
 
                 itemsIndexed(doc.blocks) { idx, block ->
                     val isHighlighted = searchMatches.isNotEmpty() && currentMatchIndex in searchMatches.indices && searchMatches[currentMatchIndex] == idx
+                    val blockHighlights = remember(readerHighlights, idx) {
+                        readerHighlights.filter { TextLocator.fromJson(it.locatorJson)?.blockIndex == idx }
+                    }
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -339,22 +366,23 @@ fun TextDocumentReader(
                                         .padding(4.dp)
                                 } else Modifier
                             )
-                            .combinedClickable(
-                                onClick = { showControls = !showControls },
-                                onLongClickLabel = "Tô sáng hoặc thêm ghi chú",
-                                onLongClick = {
-                                    if (block.plainText.isNotBlank()) {
-                                        selectedBlockForNote = Pair(idx, block)
-                                    }
-                                }
-                            )
                     ) {
-
                         RenderBlock(
                             block = block,
-                            fontSizeSp = fontSizeSp,
+                            preferences = preferences,
                             textColor = textColor,
-                            searchHighlight = if (searchQuery.isNotBlank()) searchQuery else null
+                            searchHighlight = if (searchQuery.isNotBlank()) searchQuery else null,
+                            highlights = blockHighlights,
+                            onTap = { showControls = !showControls },
+                            onOpenLink = { url ->
+                                val target = resolveExternalLink(url, book.sourceUrl)
+                                if (target != null) {
+                                    runCatching { uriHandler.openUri(target) }
+                                }
+                            },
+                            onSelection = { start, end, selectedText ->
+                                selectedTextForNote = TextSelection(idx, start, end, selectedText)
+                            }
                         )
                     }
                 }
@@ -393,26 +421,42 @@ fun TextDocumentReader(
                         }
                         // Bookmark
                         IconButton(onClick = {
-                            val currentIdx = listState.firstVisibleItemIndex
+                            val currentIdx = (listState.firstVisibleItemIndex - TEXT_READER_HEADER_ITEMS)
+                                .coerceIn(0, doc.blocks.lastIndex)
                             val blockText = doc.blocks.getOrNull(currentIdx)?.plainText?.take(100) ?: ""
                             val locator = TextLocator(blockIndex = currentIdx, characterOffset = 0, snippet = blockText,
                                 scrollOffsetPx = listState.firstVisibleItemScrollOffset)
                             scope.launch(Dispatchers.IO) {
-                                db.bookmarkDao().insertReaderBookmarkIfAbsent(
-                                    BookmarkEntity(
-                                        id = UUID.randomUUID().toString(),
-                                        bookId = book.id,
-                                        locatorJson = locator.toJson(),
-                                        chapterTitle = doc.title,
-                                        snippet = blockText
+                                val existing = db.bookmarkDao().getBookmarksForBook(book.id).filter {
+                                    com.nocap.app.domain.model.ReaderBookmarkPosition.matches(it.locatorJson, locator)
+                                }
+                                if (existing.isNotEmpty()) {
+                                    existing.forEach { db.bookmarkDao().softDeleteBookmark(it.id) }
+                                } else {
+                                    db.bookmarkDao().insertReaderBookmarkIfAbsent(
+                                        BookmarkEntity(
+                                            id = UUID.randomUUID().toString(),
+                                            bookId = book.id,
+                                            locatorJson = locator.toJson(),
+                                            chapterTitle = doc.title,
+                                            snippet = blockText
+                                        )
                                     )
-                                )
+                                }
                             }
                         }) {
+                            val currentIdx = (listState.firstVisibleItemIndex - TEXT_READER_HEADER_ITEMS)
+                                .coerceIn(0, doc.blocks.lastIndex)
+                            val isCurrentBookmarked = readerBookmarks.any {
+                                com.nocap.app.domain.model.ReaderBookmarkPosition.matches(
+                                    it.locatorJson,
+                                    TextLocator(blockIndex = currentIdx)
+                                )
+                            }
                             Icon(
-                                imageVector = if (readerBookmarks.any { com.nocap.app.domain.model.ReaderBookmarkPosition.matches(it.locatorJson, TextLocator(blockIndex = listState.firstVisibleItemIndex)) }) AppIcons.Bookmark else AppIcons.BookmarkBorder,
-                                contentDescription = localize("Đánh dấu"),
-                                tint = if (readerBookmarks.any { com.nocap.app.domain.model.ReaderBookmarkPosition.matches(it.locatorJson, TextLocator(blockIndex = listState.firstVisibleItemIndex)) }) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                imageVector = if (isCurrentBookmarked) AppIcons.Bookmark else AppIcons.BookmarkBorder,
+                                contentDescription = localize(if (isCurrentBookmarked) "Xóa dấu trang" else "Đánh dấu"),
+                                tint = if (isCurrentBookmarked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                             )
                         }
                         // Settings
@@ -459,7 +503,7 @@ fun TextDocumentReader(
                                         currentMatchIndex = 0
                                         if (matches.isNotEmpty()) {
                                             scope.launch {
-                                                listState.animateScrollToItem(matches.first())
+                                                listState.animateScrollToItem(matches.first() + TEXT_READER_HEADER_ITEMS)
                                             }
                                         }
                                     } else {
@@ -498,7 +542,7 @@ fun TextDocumentReader(
                                         onClick = {
                                             if (currentMatchIndex > 0) {
                                                 currentMatchIndex--
-                                                scope.launch { listState.animateScrollToItem(searchMatches[currentMatchIndex]) }
+                                                scope.launch { listState.animateScrollToItem(searchMatches[currentMatchIndex] + TEXT_READER_HEADER_ITEMS) }
                                             }
                                         },
                                         enabled = currentMatchIndex > 0
@@ -509,7 +553,7 @@ fun TextDocumentReader(
                                         onClick = {
                                             if (currentMatchIndex < searchMatches.size - 1) {
                                                 currentMatchIndex++
-                                                scope.launch { listState.animateScrollToItem(searchMatches[currentMatchIndex]) }
+                                                scope.launch { listState.animateScrollToItem(searchMatches[currentMatchIndex] + TEXT_READER_HEADER_ITEMS) }
                                             }
                                         },
                                         enabled = currentMatchIndex < searchMatches.size - 1
@@ -540,34 +584,73 @@ fun TextDocumentReader(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            ThemeChip("Sáng", ReaderTheme.LIGHT, theme == ReaderTheme.LIGHT) { theme = ReaderTheme.LIGHT }
-                            ThemeChip("Vàng giấy", ReaderTheme.SEPIA, theme == ReaderTheme.SEPIA) { theme = ReaderTheme.SEPIA }
-                            ThemeChip("Tối", ReaderTheme.DARK, theme == ReaderTheme.DARK) { theme = ReaderTheme.DARK }
+                            ThemeChip("Sáng", ReaderTheme.LIGHT, preferences.theme == ReaderTheme.LIGHT) {
+                                scope.launch { preferencesStore.updateTheme(ReaderTheme.LIGHT) }
+                            }
+                            ThemeChip("Vàng giấy", ReaderTheme.SEPIA, preferences.theme == ReaderTheme.SEPIA) {
+                                scope.launch { preferencesStore.updateTheme(ReaderTheme.SEPIA) }
+                            }
+                            ThemeChip("Tối", ReaderTheme.DARK, preferences.theme == ReaderTheme.DARK) {
+                                scope.launch { preferencesStore.updateTheme(ReaderTheme.DARK) }
+                            }
                         }
 
                         HorizontalDivider()
 
                         // Font size
-                        Text("Cỡ chữ: ${fontSizeSp.toInt()} sp", style = MaterialTheme.typography.bodyMedium)
+                        Text("Cỡ chữ: ${(preferences.fontSizeMultiplier * 100).toInt()}%", style = MaterialTheme.typography.bodyMedium)
                         Slider(
-                            value = fontSizeSp,
-                            onValueChange = { fontSizeSp = it },
-                            valueRange = 12f..32f,
-                            steps = 10
+                            value = preferences.fontSizeMultiplier,
+                            onValueChange = { value -> scope.launch { preferencesStore.updateFontSize(value) } },
+                            valueRange = 0.8f..2.0f,
+                            steps = 5
                         )
+
+                        Text("Phông chữ", style = MaterialTheme.typography.bodyMedium)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(
+                                selected = preferences.fontFamily == ReaderFontFamily.SYSTEM_DEFAULT,
+                                onClick = { scope.launch { preferencesStore.updateFontFamily(ReaderFontFamily.SYSTEM_DEFAULT) } },
+                                label = { Text("Mặc định") }
+                            )
+                            FilterChip(
+                                selected = preferences.fontFamily == ReaderFontFamily.SERIF,
+                                onClick = { scope.launch { preferencesStore.updateFontFamily(ReaderFontFamily.SERIF) } },
+                                label = { Text("Có chân") }
+                            )
+                            FilterChip(
+                                selected = preferences.fontFamily == ReaderFontFamily.SANS_SERIF,
+                                onClick = { scope.launch { preferencesStore.updateFontFamily(ReaderFontFamily.SANS_SERIF) } },
+                                label = { Text("Không chân") }
+                            )
+                        }
+
+                        Text("Căn lề", style = MaterialTheme.typography.bodyMedium)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(
+                                selected = preferences.textAlignment == ReaderTextAlignment.START,
+                                onClick = { scope.launch { preferencesStore.updateTextAlignment(ReaderTextAlignment.START) } },
+                                label = { Text("Căn trái") }
+                            )
+                            FilterChip(
+                                selected = preferences.textAlignment == ReaderTextAlignment.JUSTIFY,
+                                onClick = { scope.launch { preferencesStore.updateTextAlignment(ReaderTextAlignment.JUSTIFY) } },
+                                label = { Text("Căn đều") }
+                            )
+                        }
 
                         Spacer(modifier = Modifier.height(16.dp))
                     }
                 }
             }
 
-            selectedBlockForNote?.let { (idx, block) ->
+            selectedTextForNote?.let { selection ->
                 var noteText by remember { mutableStateOf("") }
                 var selectedColor by remember { mutableStateOf("YELLOW") }
                 var addToReview by remember { mutableStateOf(false) }
 
                 AlertDialog(
-                    onDismissRequest = { selectedBlockForNote = null },
+                    onDismissRequest = { selectedTextForNote = null },
                     title = { Text("Trích đoạn & Ghi chú") },
                     text = {
                         Column(
@@ -575,7 +658,7 @@ fun TextDocumentReader(
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Text(
-                                text = "“" + block.plainText.take(200) + "”",
+                                text = "“" + selection.text.take(200) + "”",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -599,19 +682,19 @@ fun TextDocumentReader(
                     confirmButton = {
                         Button(onClick = {
                             val totalBlocks = document?.blocks?.size ?: 1
-                            val prog = if (totalBlocks > 0) (idx.toFloat() / totalBlocks).coerceIn(0f, 1f) else 0f
+                            val prog = if (totalBlocks > 0) (selection.blockIndex.toFloat() / totalBlocks).coerceIn(0f, 1f) else 0f
                             val locator = TextLocator(
-                                blockIndex = idx,
-                                characterOffset = 0,
+                                blockIndex = selection.blockIndex,
+                                characterOffset = selection.startOffset,
                                 progression = prog,
-                                snippet = block.plainText.take(100)
+                                snippet = selection.text.take(100)
                             )
                             val highlightId = UUID.randomUUID().toString()
                             val highlight = HighlightEntity(
                                 id = highlightId,
                                 bookId = book.id,
                                 locatorJson = locator.toJson(),
-                                text = block.plainText,
+                                text = selection.text,
                                 color = selectedColor,
                                 note = noteText.ifBlank { null }
                             )
@@ -621,13 +704,13 @@ fun TextDocumentReader(
                                     LocalReviewRepository(db.reviewDao()).addToReview(highlightId, book.id)
                                 }
                             }
-                            selectedBlockForNote = null
+                            selectedTextForNote = null
                         }) {
                             Text("Lưu")
                         }
                     },
                     dismissButton = {
-                        TextButton(onClick = { selectedBlockForNote = null }) {
+                        TextButton(onClick = { selectedTextForNote = null }) {
                             Text("Hủy")
                         }
                     }
@@ -665,10 +748,49 @@ private fun ThemeChip(label: String, targetTheme: ReaderTheme, isSelected: Boole
 @Composable
 private fun RenderBlock(
     block: TextDocumentBlock,
-    fontSizeSp: Float,
+    preferences: ReaderPreferences,
     textColor: Color,
-    searchHighlight: String?
+    searchHighlight: String?,
+    highlights: List<HighlightEntity>,
+    onTap: () -> Unit,
+    onOpenLink: (String) -> Unit,
+    onSelection: (Int, Int, String) -> Unit
 ) {
+    val fontSizeSp = 16f * preferences.fontSizeMultiplier
+    val fontFamily = preferences.fontFamily.toComposeFontFamily()
+    val textAlign = when (preferences.textAlignment) {
+        ReaderTextAlignment.START -> TextAlign.Start
+        ReaderTextAlignment.JUSTIFY -> TextAlign.Justify
+    }
+    @Composable
+    fun ReaderText(
+        spans: List<TextSpan>,
+        sizeSp: Float = fontSizeSp,
+        weight: FontWeight? = null,
+        style: FontStyle? = null,
+        color: Color = textColor,
+        modifier: Modifier = Modifier,
+        alignment: TextAlign = textAlign
+    ) {
+        val annotated = remember(spans, color, searchHighlight, highlights) {
+            buildSpannedText(spans, color, searchHighlight, highlights)
+        }
+        InteractiveReaderText(
+            text = annotated,
+            fontSizeSp = sizeSp,
+            lineHeightSp = sizeSp * preferences.lineHeightMultiplier,
+            fontFamily = fontFamily,
+            fontWeight = weight,
+            fontStyle = style,
+            textAlign = alignment,
+            color = color,
+            modifier = modifier,
+            onTap = onTap,
+            onOpenLink = onOpenLink,
+            onSelection = onSelection
+        )
+    }
+
     when (block) {
         is TextDocumentBlock.Heading -> {
             val (hSize, hWeight) = when (block.level) {
@@ -677,21 +799,15 @@ private fun RenderBlock(
                 3 -> (fontSizeSp * 1.15f) to FontWeight.SemiBold
                 else -> fontSizeSp to FontWeight.SemiBold
             }
-            Text(
-                text = block.text,
-                fontSize = hSize.sp,
-                fontWeight = hWeight,
-                color = textColor,
+            ReaderText(
+                spans = listOf(TextSpan(block.text)),
+                sizeSp = hSize,
+                weight = hWeight,
                 modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
             )
         }
         is TextDocumentBlock.Paragraph -> {
-            Text(
-                text = buildSpannedText(block.spans, textColor, searchHighlight),
-                fontSize = fontSizeSp.sp,
-                lineHeight = (fontSizeSp * 1.5f).sp,
-                color = textColor
-            )
+            ReaderText(spans = block.spans)
         }
         is TextDocumentBlock.ListItem -> {
             Row(modifier = Modifier.fillMaxWidth()) {
@@ -701,11 +817,8 @@ private fun RenderBlock(
                     color = textColor,
                     fontWeight = FontWeight.Bold
                 )
-                Text(
-                    text = buildSpannedText(block.spans, textColor, searchHighlight),
-                    fontSize = fontSizeSp.sp,
-                    lineHeight = (fontSizeSp * 1.5f).sp,
-                    color = textColor,
+                ReaderText(
+                    spans = block.spans,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -723,11 +836,9 @@ private fun RenderBlock(
                         .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp))
                 )
                 Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = buildSpannedText(block.spans, textColor.copy(alpha = 0.85f), searchHighlight),
-                    fontSize = fontSizeSp.sp,
-                    fontStyle = FontStyle.Italic,
-                    lineHeight = (fontSizeSp * 1.5f).sp,
+                ReaderText(
+                    spans = block.spans,
+                    style = FontStyle.Italic,
                     color = textColor.copy(alpha = 0.85f)
                 )
             }
@@ -738,12 +849,19 @@ private fun RenderBlock(
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(
-                    text = block.code,
+                InteractiveReaderText(
+                    text = buildSpannedText(listOf(TextSpan(block.code, isCode = true)), textColor, searchHighlight, highlights),
+                    fontSizeSp = fontSizeSp * 0.9f,
+                    lineHeightSp = fontSizeSp * preferences.lineHeightMultiplier,
                     fontFamily = FontFamily.Monospace,
-                    fontSize = (fontSizeSp * 0.9f).sp,
+                    fontWeight = null,
+                    fontStyle = null,
+                    textAlign = TextAlign.Start,
                     color = textColor,
-                    modifier = Modifier.padding(12.dp)
+                    modifier = Modifier.padding(12.dp),
+                    onTap = onTap,
+                    onOpenLink = onOpenLink,
+                    onSelection = onSelection
                 )
             }
         }
@@ -764,6 +882,8 @@ private fun RenderBlock(
                             Text(
                                 text = cell,
                                 fontSize = (fontSizeSp * 0.95f).sp,
+                                fontFamily = fontFamily,
+                                textAlign = textAlign,
                                 color = textColor,
                                 modifier = Modifier.width(120.dp)
                             )
@@ -794,12 +914,90 @@ private fun RenderBlock(
     }
 }
 
+private fun ReaderFontFamily.toComposeFontFamily(): FontFamily = when (this) {
+    ReaderFontFamily.SERIF, ReaderFontFamily.LORA -> FontFamily.Serif
+    ReaderFontFamily.SANS_SERIF, ReaderFontFamily.ROBOTO -> FontFamily.SansSerif
+    ReaderFontFamily.SYSTEM_DEFAULT, ReaderFontFamily.CUSTOM -> FontFamily.Default
+}
+
+internal fun resolveExternalLink(url: String, baseUrl: String?): String? {
+    val trimmed = url.trim()
+    if (trimmed.isEmpty() || trimmed.startsWith("#")) return null
+    return runCatching {
+        val directScheme = java.net.URI(trimmed).scheme?.lowercase()
+        val resolved = if (directScheme == null && !baseUrl.isNullOrBlank()) {
+            java.net.URI(baseUrl).resolve(trimmed).toString()
+        } else {
+            trimmed
+        }
+        val scheme = java.net.URI(resolved).scheme?.lowercase()
+        resolved.takeIf { scheme in setOf("http", "https", "mailto") }
+    }.getOrNull()
+}
+
+@Composable
+private fun InteractiveReaderText(
+    text: AnnotatedString,
+    fontSizeSp: Float,
+    lineHeightSp: Float,
+    fontFamily: FontFamily,
+    fontWeight: FontWeight?,
+    fontStyle: FontStyle?,
+    textAlign: TextAlign,
+    color: Color,
+    modifier: Modifier = Modifier,
+    onTap: () -> Unit,
+    onOpenLink: (String) -> Unit,
+    onSelection: (Int, Int, String) -> Unit
+) {
+    var layoutResult by remember(text) { mutableStateOf<TextLayoutResult?>(null) }
+    Text(
+        text = text,
+        fontSize = fontSizeSp.sp,
+        lineHeight = lineHeightSp.sp,
+        fontFamily = fontFamily,
+        fontWeight = fontWeight,
+        fontStyle = fontStyle,
+        textAlign = textAlign,
+        color = color,
+        onTextLayout = { layoutResult = it },
+        modifier = modifier.pointerInput(text) {
+            detectTapGestures(
+                onTap = { position ->
+                    val layout = layoutResult
+                    if (layout == null || text.isEmpty()) {
+                        onTap()
+                        return@detectTapGestures
+                    }
+                    val offset = layout.getOffsetForPosition(position).coerceIn(0, text.lastIndex)
+                    val link = text.getStringAnnotations("URL", offset, offset).firstOrNull()?.item
+                    if (link != null) onOpenLink(link) else onTap()
+                },
+                onLongPress = { position ->
+                    val layout = layoutResult ?: return@detectTapGestures
+                    if (text.isEmpty()) return@detectTapGestures
+                    val offset = layout.getOffsetForPosition(position).coerceIn(0, text.lastIndex)
+                    val boundary = layout.getWordBoundary(offset)
+                    var start = boundary.start.coerceIn(0, text.length)
+                    var end = boundary.end.coerceIn(start, text.length)
+                    while (start < end && !text[start].isLetterOrDigit()) start++
+                    while (end > start && !text[end - 1].isLetterOrDigit()) end--
+                    if (end > start) onSelection(start, end, text.text.substring(start, end))
+                }
+            )
+        }
+    )
+}
+
 private fun buildSpannedText(
     spans: List<TextSpan>,
     defaultColor: Color,
-    searchHighlight: String?
+    searchHighlight: String?,
+    highlights: List<HighlightEntity>
 ) = buildAnnotatedString {
+    val plainText = spans.joinToString(separator = "") { it.text }
     for (span in spans) {
+        val spanStart = length
         val spanStyle = SpanStyle(
             fontWeight = if (span.isBold) FontWeight.Bold else null,
             fontStyle = if (span.isItalic) FontStyle.Italic else null,
@@ -811,25 +1009,37 @@ private fun buildSpannedText(
             fontFamily = if (span.isCode) FontFamily.Monospace else null,
             color = if (span.linkUrl != null) Color(0xFF1E88E5) else defaultColor
         )
-        withStyle(spanStyle) {
-            if (searchHighlight != null && searchHighlight.isNotBlank()) {
-                val text = span.text
-                var start = 0
-                while (true) {
-                    val idx = text.indexOf(searchHighlight, start, ignoreCase = true)
-                    if (idx == -1) {
-                        append(text.substring(start))
-                        break
-                    }
-                    append(text.substring(start, idx))
-                    withStyle(SpanStyle(background = Color(0xFFFFF176), color = Color.Black)) {
-                        append(text.substring(idx, idx + searchHighlight.length))
-                    }
-                    start = idx + searchHighlight.length
-                }
-            } else {
-                append(span.text)
-            }
+        withStyle(spanStyle) { append(span.text) }
+        if (!span.linkUrl.isNullOrBlank()) {
+            addStringAnnotation("URL", span.linkUrl, spanStart, length)
         }
     }
+
+    highlights.forEach { highlight ->
+        val locator = TextLocator.fromJson(highlight.locatorJson) ?: return@forEach
+        val start = locator.characterOffset.coerceIn(0, length)
+        val end = (start + highlight.text.length).coerceIn(start, length)
+        if (end > start) addStyle(SpanStyle(background = highlightColor(highlight.color)), start, end)
+    }
+
+    if (!searchHighlight.isNullOrBlank()) {
+        var start = 0
+        while (start < length) {
+            val match = plainText.indexOf(searchHighlight, startIndex = start, ignoreCase = true)
+            if (match < 0) break
+            addStyle(
+                SpanStyle(background = Color(0xFFFFF176), color = Color.Black),
+                match,
+                match + searchHighlight.length
+            )
+            start = match + searchHighlight.length
+        }
+    }
+}
+
+private fun highlightColor(name: String): Color = when (name.uppercase()) {
+    "GREEN" -> Color(0x8066BB6A)
+    "BLUE" -> Color(0x8064B5F6)
+    "PINK" -> Color(0x80F48FB1)
+    else -> Color(0x80FFF176)
 }

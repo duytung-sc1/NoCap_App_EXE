@@ -35,6 +35,7 @@ class Milestone6ReaderCustomizationTest {
         assertEquals(1.2, readiumPrefs.fontSize ?: 0.0, 0.001)
         assertEquals(1.6, readiumPrefs.lineHeight ?: 0.0, 0.001)
         assertEquals(TextAlign.JUSTIFY, readiumPrefs.textAlign)
+        assertEquals(false, readiumPrefs.publisherStyles)
         assertEquals(false, readiumPrefs.scroll)
     }
 

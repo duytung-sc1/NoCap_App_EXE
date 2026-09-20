@@ -53,6 +53,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 import org.readium.r2.navigator.epub.EpubPreferences
 import org.readium.r2.navigator.preferences.FontFamily
 import org.readium.r2.navigator.preferences.TextAlign
@@ -64,6 +65,35 @@ import org.readium.r2.shared.publication.services.search.search
 import org.readium.r2.shared.util.Try
 import java.io.File
 import java.util.UUID
+import kotlin.math.abs
+
+internal fun isSameReadiumBookmarkPosition(savedLocatorJson: String, currentLocatorJson: String): Boolean {
+    return runCatching {
+        val saved = JSONObject(savedLocatorJson)
+        val current = JSONObject(currentLocatorJson)
+        if (saved.optString("href") != current.optString("href")) return@runCatching false
+
+        val savedLocations = saved.optJSONObject("locations") ?: return@runCatching saved.toString() == current.toString()
+        val currentLocations = current.optJSONObject("locations") ?: return@runCatching saved.toString() == current.toString()
+
+        val savedFragments = savedLocations.optJSONArray("fragments")
+        val currentFragments = currentLocations.optJSONArray("fragments")
+        if (savedFragments != null && currentFragments != null && savedFragments.toString() == currentFragments.toString()) {
+            return@runCatching true
+        }
+
+        val savedPosition = savedLocations.optInt("position", -1)
+        val currentPosition = currentLocations.optInt("position", -1)
+        if (savedPosition >= 0 && currentPosition >= 0 && savedPosition == currentPosition) {
+            return@runCatching true
+        }
+
+        val savedProgression = savedLocations.optDouble("progression", Double.NaN)
+        val currentProgression = currentLocations.optDouble("progression", Double.NaN)
+        !savedProgression.isNaN() && !currentProgression.isNaN() &&
+            abs(savedProgression - currentProgression) <= 0.0025
+    }.getOrDefault(false)
+}
 
 sealed interface ReaderUiState {
     data object Loading : ReaderUiState
@@ -118,7 +148,10 @@ fun ReaderPreferences.toReadiumPreferences(): EpubPreferences {
         lineHeight = lineHeightMultiplier.toDouble(),
         textAlign = readiumTextAlign,
         theme = readiumTheme,
-        scroll = isScrollMode
+        scroll = isScrollMode,
+        // Reader choices must win over publisher CSS; otherwise many EPUBs keep their
+        // own white background, font and alignment and make these controls appear broken.
+        publisherStyles = false
     )
 }
 
@@ -210,7 +243,10 @@ class ReaderViewModel(
 
     val isCurrentBookmarked: StateFlow<Boolean> = combine(_currentLocator, bookmarks) { locator, list ->
         if (locator == null) false
-        else list.any { it.locatorJson.contains(locator.href.toString()) }
+        else {
+            val currentJson = publicationManager.serializeLocator(locator)
+            list.any { isSameReadiumBookmarkPosition(it.locatorJson, currentJson) }
+        }
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -400,14 +436,18 @@ class ReaderViewModel(
     fun toggleBookmark() {
         val locator = _currentLocator.value ?: return
         viewModelScope.launch {
-            val existing = bookmarks.value.find { it.locatorJson.contains(locator.href.toString()) }
-            if (existing != null) {
-                bookmarkRepository.removeBookmark(existing.id)
+            val currentJson = publicationManager.serializeLocator(locator)
+            val existing = bookmarks.value.filter { isSameReadiumBookmarkPosition(it.locatorJson, currentJson) }
+            if (existing.isNotEmpty()) {
+                // Older builds could create several bookmarks for one position because
+                // the icon never recognized its own locator. One toggle removes that
+                // duplicate group and restores the expected off state.
+                existing.forEach { bookmarkRepository.removeBookmark(it.id) }
             } else {
                 val bookmark = Bookmark(
                     id = UUID.randomUUID().toString(),
                     bookId = bookId,
-                    locatorJson = publicationManager.serializeLocator(locator),
+                    locatorJson = currentJson,
                     chapterTitle = locator.title ?: "Dấu trang",
                     snippet = locator.text.highlight ?: locator.text.after ?: locator.title,
                     createdAt = System.currentTimeMillis()
