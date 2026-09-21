@@ -7,11 +7,25 @@ import java.io.IOException
 internal object ManagedDocumentFiles {
     fun resolve(profileFiles: File, path: String): File {
         require(path.isNotBlank()) { "Missing document path" }
+        val canonicalProfile = profileFiles.canonicalFile
         val file = File(path).canonicalFile
-        val roots = listOf("imported", "books").map { File(profileFiles, it).canonicalFile }
-        require(file.parentFile in roots) { "Document path is outside profile storage" }
+        require(file.path.startsWith(canonicalProfile.path + File.separator)) { "Document path is outside profile storage" }
         require(!file.isDirectory) { "Document path is a directory" }
+        require(isDocumentParent(canonicalProfile, file.parentFile)) { "Document path is outside profile storage" }
         return file
+    }
+
+    private fun isDocumentParent(profileFiles: File, parent: File?): Boolean {
+        if (parent == null) return false
+        if (parent.name != "imported" && parent.name != "books") return false
+        var current: File? = parent.parentFile
+        while (current != null) {
+            if (current == profileFiles) return true
+            val name = current.name
+            if (name != "files" && !name.startsWith("restored-")) return false
+            current = current.parentFile
+        }
+        return false
     }
 
     fun delete(profileFiles: File, path: String) {

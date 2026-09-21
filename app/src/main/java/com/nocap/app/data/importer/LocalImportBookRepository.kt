@@ -342,7 +342,7 @@ class LocalImportBookRepository(
         runCatching {
             val download = downloadDao.getDownloadByBookId(bookId)
             if (download != null && download.localFilePath.isNotBlank()) {
-                ManagedDocumentFiles.delete(profileFiles, download.localFilePath)
+                runCatching { ManagedDocumentFiles.delete(profileFiles, download.localFilePath) }
             }
 
             bookmarkDao.deleteBookmarksByBookId(bookId)

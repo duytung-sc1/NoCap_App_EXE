@@ -36,4 +36,13 @@ class ManagedDocumentFilesTest {
         assertEquals("safe", protected.readText())
         assertTrue(directory.exists())
     }
+
+    @Test fun allowsDeletingRestoredBooksFromCloudBackup() {
+        val root = temporary.newFolder("profile")
+        val restoredFile = File(root, "restored-${java.util.UUID.randomUUID()}/files/imported/book.epub").apply {
+            parentFile!!.mkdirs(); writeText("fixture")
+        }
+        ManagedDocumentFiles.delete(root, restoredFile.path)
+        assertFalse(restoredFile.exists())
+    }
 }
