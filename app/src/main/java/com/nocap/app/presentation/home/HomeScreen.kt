@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -28,6 +29,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -41,6 +43,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -51,6 +54,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.nocap.app.core.designsystem.AppIcons
+import com.nocap.app.domain.model.Announcement
+import com.nocap.app.domain.model.AnnouncementType
 import com.nocap.app.domain.model.Category
 import com.nocap.app.presentation.components.BookCard
 import com.nocap.app.presentation.memory.HighlightCard
@@ -111,6 +116,18 @@ fun HomeScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
+                // 0. System announcements
+                if (uiState.announcements.isNotEmpty()) {
+                    items(uiState.announcements, key = { "ann_${it.id}" }) { ann ->
+                        AnnouncementBanner(
+                            announcement = ann,
+                            onDismiss = { viewModel.dismissAnnouncement(ann.id) },
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                        )
+                    }
+                    item { Spacer(modifier = Modifier.height(4.dp)) }
+                }
+
                 // 1. Welcome Card if brand new user
                 if (uiState.continueReading.isEmpty() && uiState.recentDocuments.isEmpty()) {
                     item {
@@ -559,5 +576,68 @@ private fun CategoryChip(
             color = MaterialTheme.colorScheme.onPrimaryContainer,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
         )
+    }
+}
+
+@Composable
+private fun AnnouncementBanner(
+    announcement: Announcement,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    // warning=đỏ, maintenance=vàng, info=xanh lam
+    val bgColor = when (announcement.type) {
+        AnnouncementType.WARNING     -> Color(0xFFFFEBEE)
+        AnnouncementType.MAINTENANCE -> Color(0xFFFFF8E1)
+        AnnouncementType.INFO        -> Color(0xFFE3F2FD)
+    }
+    val accentColor = when (announcement.type) {
+        AnnouncementType.WARNING     -> Color(0xFFD32F2F)
+        AnnouncementType.MAINTENANCE -> Color(0xFFF57F17)
+        AnnouncementType.INFO        -> Color(0xFF1565C0)
+    }
+    val borderColor = when (announcement.type) {
+        AnnouncementType.WARNING     -> Color(0xFFEF9A9A)
+        AnnouncementType.MAINTENANCE -> Color(0xFFFFCC02)
+        AnnouncementType.INFO        -> Color(0xFF90CAF9)
+    }
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = bgColor),
+        border = androidx.compose.foundation.BorderStroke(1.dp, borderColor)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 14.dp, top = 10.dp, bottom = 10.dp, end = 4.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = announcement.title,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = accentColor
+                )
+                if (announcement.message.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = announcement.message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = accentColor.copy(alpha = 0.85f)
+                    )
+                }
+            }
+            IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = "Đóng thông báo",
+                    tint = accentColor.copy(alpha = 0.7f),
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
     }
 }

@@ -172,6 +172,31 @@ internal object UiTranslations {
         e("Khôi phục", "Restore"),
         e("Xóa bản sao lưu", "Delete backup"),
         e("Nâng cấp Pro", "Upgrade to Pro"),
+        e("Nâng cấp Pro qua ngân hàng", "Upgrade to Pro by bank transfer"),
+        e("Đăng nhập để nâng cấp Pro.", "Sign in to upgrade to Pro."),
+        e("Thanh toán chuyển khoản chưa sẵn sàng. Vui lòng thử lại sau.", "Bank transfer payments are not ready yet. Please try again later."),
+        e("Chưa tải được danh sách ứng dụng ngân hàng. Bạn vẫn có thể sao chép thông tin để chuyển khoản.", "The bank app list could not be loaded. You can still copy the transfer details."),
+        e("Chưa tạo được yêu cầu thanh toán. Vui lòng kiểm tra mạng và thử lại.", "The payment request could not be created. Check your connection and try again."),
+        e("Thanh toán thành công. Gói Pro đã được kích hoạt.", "Payment successful. Pro is now active."),
+        e("Đã sao chép số tài khoản.", "Account number copied."),
+        e("Đã sao chép nội dung chuyển khoản.", "Transfer memo copied."),
+        e("Chưa kiểm tra được giao dịch. Vui lòng thử lại.", "The payment status could not be checked. Please try again."),
+        e("Không mở được ứng dụng ngân hàng. Nội dung chuyển khoản đã được sao chép.", "The bank app could not be opened. The transfer memo has been copied."),
+        e("Thanh toán thành công", "Payment successful"),
+        e("Thanh toán nâng cấp Pro", "Pro upgrade payment"),
+        e("Mã QR thanh toán Pro", "Pro payment QR code"),
+        e("Quét mã QR để thanh toán", "Scan the QR code to pay"),
+        e("Gói Pro đã được kích hoạt cho tài khoản này.", "Pro has been activated for this account."),
+        e("Quét QR hoặc dùng thông tin bên dưới. Chuyển đúng số tiền và nội dung để hệ thống tự xác nhận.", "Scan the QR code or use the details below. Transfer the exact amount and memo for automatic confirmation."),
+        e("Số tiền", "Amount"),
+        e("Ngân hàng", "Bank"),
+        e("Chủ tài khoản", "Account holder"),
+        e("Số tài khoản", "Account number"),
+        e("Nội dung chuyển khoản", "Transfer memo"),
+        e("Mở ứng dụng ngân hàng", "Open bank app"),
+        e("Kiểm tra thanh toán", "Check payment"),
+        e("Chọn ứng dụng ngân hàng", "Choose a bank app"),
+        e("Tự điền", "Auto-fill"),
         e("Khôi phục giao dịch", "Restore purchases"),
         e("Thanh toán đang chờ xác nhận", "Purchase pending"),
         e("Cập nhật trạng thái gói", "Refresh plan status"),
@@ -357,6 +382,9 @@ internal object UiTranslations {
         }
         match("Cập nhật \\(phiên bản (.+)\\)")?.let { m ->
             return "Update (version ${m.groupValues[1]})"
+        }
+        match("Yêu cầu hết hạn: (.+)")?.let { m ->
+            return "Request expires: ${m.groupValues[1]}"
         }
         match("Chọn bộ sưu tập cho (\\d+) tài liệu:")?.let { m ->
             return "Choose collections for ${m.groupValues[1]} documents:"
