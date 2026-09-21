@@ -95,7 +95,8 @@ fun ImageArchiveReader(
     DisposableEffect(Unit) {
         onDispose {
             val total = pages.size
-            val prog = if (total > 0) ((pagerState.currentPage + 1).toFloat() / total).coerceIn(0f, 1f) else 0f
+            val rawProg = if (total > 0) ((pagerState.currentPage + 1).toFloat() / total) else 0f
+            val prog = if (rawProg >= 0.98f || (total > 0 && pagerState.currentPage >= total - 1)) 1f else rawProg.coerceIn(0f, 1f)
             sessionId?.let { sId ->
                 sessionManager.endSessionAsync(sId, prog)
             }
@@ -150,7 +151,8 @@ fun ImageArchiveReader(
             .collect { pageIdx ->
                 if (pages.isEmpty()) return@collect
                 val currentPage = pages.getOrNull(pageIdx) ?: return@collect
-                val progression = (pageIdx.toFloat() + 1f) / pages.size
+                val rawProgression = (pageIdx.toFloat() + 1f) / pages.size
+                val progression = if (rawProgression >= 0.98f || pageIdx >= pages.size - 1) 1f else rawProgression.coerceIn(0f, 1f)
                 val locator = ArchiveLocator(
                     pageIndex = pageIdx,
                     entryName = currentPage.entryName,
@@ -167,6 +169,9 @@ fun ImageArchiveReader(
                             lastReadAt = System.currentTimeMillis()
                         )
                     )
+                    if (progression >= 0.98f) {
+                        db.catalogDao().updateReadingStatus(book.id, DocumentReadingStatus.COMPLETED)
+                    }
                 }
             }
     }
@@ -178,7 +183,8 @@ fun ImageArchiveReader(
                 val pageIdx = pagerState.currentPage
                 val currentPage = pages.getOrNull(pageIdx)
                 if (currentPage != null) {
-                    val progression = (pageIdx.toFloat() + 1f) / pages.size
+                    val rawProgression = (pageIdx.toFloat() + 1f) / pages.size
+                    val progression = if (rawProgression >= 0.98f || pageIdx >= pages.size - 1) 1f else rawProgression.coerceIn(0f, 1f)
                     val locator = ArchiveLocator(
                         pageIndex = pageIdx,
                         entryName = currentPage.entryName,
@@ -194,6 +200,9 @@ fun ImageArchiveReader(
                                 lastReadAt = System.currentTimeMillis()
                             )
                         )
+                        if (progression >= 0.98f) {
+                            db.catalogDao().updateReadingStatus(book.id, DocumentReadingStatus.COMPLETED)
+                        }
                     }
                 }
             }

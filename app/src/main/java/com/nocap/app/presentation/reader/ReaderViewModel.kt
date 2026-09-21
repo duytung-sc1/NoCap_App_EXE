@@ -346,7 +346,8 @@ class ReaderViewModel(
                 libraryRepository.updateLastOpenedAt(bookId, System.currentTimeMillis())
 
                 // Start reading session
-                val startProgress = (initialLocator?.locations?.progression ?: savedProgress?.progression?.toDouble() ?: 0.0).toFloat()
+                val rawStart = initialLocator?.locations?.let { it.totalProgression ?: it.progression } ?: savedProgress?.progression?.toDouble() ?: 0.0
+                val startProgress = (if (rawStart >= 0.98) 1.0 else rawStart).toFloat().coerceIn(0f, 1f)
                 viewModelScope.launch {
                     activeSessionId = readingSessionManager?.startSession(
                         bookId = bookId,
@@ -381,7 +382,8 @@ class ReaderViewModel(
         lastSavedTime = now
 
         viewModelScope.launch {
-            val progression = (locator.locations.progression ?: 0.0).toFloat().coerceIn(0f, 1f)
+            val rawProgression = locator.locations.let { it.totalProgression ?: it.progression } ?: 0.0
+            val progression = if (rawProgression >= 0.98) 1f else rawProgression.toFloat().coerceIn(0f, 1f)
             val chapterTitle = locator.title
             val locatorJson = publicationManager.serializeLocator(locator)
 
@@ -398,7 +400,7 @@ class ReaderViewModel(
             if (currentBook != null) {
                 if (currentBook.readingStatus == com.nocap.app.domain.model.DocumentReadingStatus.UNREAD && progression > 0f) {
                     libraryRepository.setReadingStatus(bookId, com.nocap.app.domain.model.DocumentReadingStatus.READING)
-                } else if (currentBook.readingStatus == com.nocap.app.domain.model.DocumentReadingStatus.READING && progression >= 0.98f) {
+                } else if (currentBook.readingStatus != com.nocap.app.domain.model.DocumentReadingStatus.COMPLETED && progression >= 0.98f) {
                     libraryRepository.setReadingStatus(bookId, com.nocap.app.domain.model.DocumentReadingStatus.COMPLETED)
                 }
             }
@@ -408,13 +410,15 @@ class ReaderViewModel(
     fun endActiveSession(progression: Float? = null) {
         val sId = activeSessionId ?: return
         activeSessionId = null
-        val finalProg = progression ?: (_currentLocator.value?.locations?.progression ?: 0.0).toFloat()
+        val rawProg = progression ?: (_currentLocator.value?.locations?.let { it.totalProgression ?: it.progression } ?: 0.0).toFloat()
+        val finalProg = if (rawProg >= 0.98f) 1f else rawProg.coerceIn(0f, 1f)
         readingSessionManager?.endSessionAsync(sId, finalProg)
     }
 
     fun saveCurrentLocationImmediately(locator: Locator?) {
         val target = locator ?: _currentLocator.value
-        val progression = (target?.locations?.progression ?: 0.0).toFloat().coerceIn(0f, 1f)
+        val rawProgression = target?.locations?.let { it.totalProgression ?: it.progression } ?: 0.0
+        val progression = if (rawProgression >= 0.98) 1f else rawProgression.toFloat().coerceIn(0f, 1f)
         endActiveSession(progression)
         if (target == null) return
         val now = System.currentTimeMillis()
@@ -430,6 +434,15 @@ class ReaderViewModel(
                 lastReadAt = now
             )
             persistProgress(progress)
+
+            val currentBook = catalogRepository.getBookById(bookId)
+            if (currentBook != null) {
+                if (currentBook.readingStatus == com.nocap.app.domain.model.DocumentReadingStatus.UNREAD && progression > 0f) {
+                    libraryRepository.setReadingStatus(bookId, com.nocap.app.domain.model.DocumentReadingStatus.READING)
+                } else if (currentBook.readingStatus != com.nocap.app.domain.model.DocumentReadingStatus.COMPLETED && progression >= 0.98f) {
+                    libraryRepository.setReadingStatus(bookId, com.nocap.app.domain.model.DocumentReadingStatus.COMPLETED)
+                }
+            }
         }
     }
 
@@ -508,7 +521,7 @@ class ReaderViewModel(
                                     locator = loc,
                                     chapterTitle = loc.title,
                                     snippet = snippet.trim(),
-                                    progression = loc.locations.progression?.toFloat()
+                                    progression = loc.locations.let { it.totalProgression ?: it.progression }?.toFloat()
                                 )
                             )
                         }

@@ -168,8 +168,11 @@ fun TextDocumentReader(
     DisposableEffect(Unit) {
         onDispose {
             val total = document?.blocks?.size ?: 1
-            val blockIndex = (listState.firstVisibleItemIndex - TEXT_READER_HEADER_ITEMS).coerceAtLeast(0)
-            val finalProg = if (total > 0) (blockIndex.toFloat() / total).coerceIn(0f, 1f) else 0f
+            val lastVisIdx = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: listState.firstVisibleItemIndex
+            val lastBlockIndex = (lastVisIdx - TEXT_READER_HEADER_ITEMS).coerceAtLeast(0)
+            val isAtEnd = !listState.canScrollForward || (total > 0 && lastBlockIndex >= total - 1)
+            val rawProg = if (total > 0) ((lastBlockIndex + 1).toFloat() / total) else 0f
+            val finalProg = if (isAtEnd || rawProg >= 0.98f) 1f else rawProg.coerceIn(0f, 1f)
             sessionId?.let { sId ->
                 sessionManager.endSessionAsync(sId, finalProg)
             }
@@ -246,13 +249,19 @@ fun TextDocumentReader(
     @OptIn(kotlinx.coroutines.FlowPreview::class)
     LaunchedEffect(listState, document, positionRestored) {
         if (!positionRestored || document == null) return@LaunchedEffect
-        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+        snapshotFlow {
+            val lastVisIdx = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: listState.firstVisibleItemIndex
+            Triple(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset, lastVisIdx)
+        }
             .distinctUntilChanged()
             .sample(500)
-            .collect { (index, offset) ->
+            .collect { (index, offset, lastVisIdx) ->
                 val totalBlocks = document?.blocks?.size ?: 1
                 val blockIndex = (index - TEXT_READER_HEADER_ITEMS).coerceAtLeast(0)
-                val progression = if (totalBlocks > 0) (blockIndex.toFloat() / totalBlocks).coerceIn(0f, 1f) else 0f
+                val lastBlockIndex = (lastVisIdx - TEXT_READER_HEADER_ITEMS).coerceAtLeast(0)
+                val isAtEnd = !listState.canScrollForward || (totalBlocks > 0 && lastBlockIndex >= totalBlocks - 1)
+                val rawProgression = if (totalBlocks > 0) ((lastBlockIndex + 1).toFloat() / totalBlocks) else 0f
+                val progression = if (isAtEnd || rawProgression >= 0.98f) 1f else rawProgression.coerceIn(0f, 1f)
                 val blockText = document?.blocks?.getOrNull(blockIndex)?.plainText?.take(100)
 
                 val locator = TextLocator(
@@ -273,6 +282,9 @@ fun TextDocumentReader(
                             lastReadAt = System.currentTimeMillis()
                         )
                     )
+                    if (progression >= 0.98f) {
+                        db.catalogDao().updateReadingStatus(book.id, DocumentReadingStatus.COMPLETED)
+                    }
                 }
             }
     }
@@ -281,11 +293,21 @@ fun TextDocumentReader(
     DisposableEffect(Unit) {
         onDispose {
             if (!positionRestored || document == null) return@onDispose
-            val idx = (listState.firstVisibleItemIndex - TEXT_READER_HEADER_ITEMS).coerceAtLeast(0)
+            val index = listState.firstVisibleItemIndex
+            val offset = listState.firstVisibleItemScrollOffset
+            val lastVisIdx = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: index
+            val blockIndex = (index - TEXT_READER_HEADER_ITEMS).coerceAtLeast(0)
+            val lastBlockIndex = (lastVisIdx - TEXT_READER_HEADER_ITEMS).coerceAtLeast(0)
             val totalBlocks = document?.blocks?.size ?: 1
-            val progression = if (totalBlocks > 0) (idx.toFloat() / totalBlocks).coerceIn(0f, 1f) else 0f
-            val locator = TextLocator(blockIndex = idx, characterOffset = 0, progression = progression,
-                scrollOffsetPx = listState.firstVisibleItemScrollOffset)
+            val isAtEnd = !listState.canScrollForward || (totalBlocks > 0 && lastBlockIndex >= totalBlocks - 1)
+            val rawProgression = if (totalBlocks > 0) ((lastBlockIndex + 1).toFloat() / totalBlocks) else 0f
+            val progression = if (isAtEnd || rawProgression >= 0.98f) 1f else rawProgression.coerceIn(0f, 1f)
+            val locator = TextLocator(
+                blockIndex = blockIndex,
+                characterOffset = 0,
+                progression = progression,
+                scrollOffsetPx = offset
+            )
             ReadingSessionManager.processScope.launch {
                 db.progressDao().saveProgress(
                     ReadingProgressEntity(
@@ -296,6 +318,9 @@ fun TextDocumentReader(
                         lastReadAt = System.currentTimeMillis()
                     )
                 )
+                if (progression >= 0.98f) {
+                    db.catalogDao().updateReadingStatus(book.id, DocumentReadingStatus.COMPLETED)
+                }
             }
         }
     }

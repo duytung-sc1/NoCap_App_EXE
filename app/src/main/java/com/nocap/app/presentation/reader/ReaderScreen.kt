@@ -129,6 +129,7 @@ import com.nocap.app.domain.model.PublicationFormat
 import com.nocap.app.domain.model.TocItem
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import org.json.JSONObject
 import org.readium.adapter.pdfium.navigator.PdfiumEngineProvider
 import org.readium.r2.navigator.DecorableNavigator
@@ -860,10 +861,12 @@ fun ReaderScreen(
             },
             confirmButton = {
                 Button(onClick = {
+                    val rawProg = (lastKnownLocator?.locations?.let { it.totalProgression ?: it.progression } ?: 0.0).toFloat()
+                    val progression = if (rawProg >= 0.98f) 1f else rawProg.coerceIn(0f, 1f)
                     val locator = com.nocap.app.domain.model.PdfAnnotationLocator(
                         pageIndex = pdfExtractPageIndex,
                         pageNumber = pdfExtractPageIndex + 1,
-                        progression = (lastKnownLocator?.locations?.progression ?: 0.0).toFloat(),
+                        progression = progression,
                         selectedText = selectedSnippet,
                         startOffset = 0,
                         endOffset = selectedSnippet.length,
@@ -1030,8 +1033,11 @@ fun ReaderChromeFooter(
                 }
 
                 if (preferences.showPercentage) {
-                    val progression = currentLocator?.locations?.progression
-                    val pctText = if (progression != null) "${(progression * 100).toInt()}%" else "--%"
+                    val rawProg = currentLocator?.locations?.let { it.totalProgression ?: it.progression }
+                    val pctText = if (rawProg != null) {
+                        val pct = if (rawProg >= 0.98) 100 else (rawProg * 100).roundToInt().coerceIn(0, 100)
+                        "$pct%"
+                    } else "--%"
                     Text(
                         text = pctText,
                         style = MaterialTheme.typography.labelSmall,

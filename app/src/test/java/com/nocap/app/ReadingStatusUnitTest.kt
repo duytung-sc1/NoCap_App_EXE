@@ -1,6 +1,7 @@
 package com.nocap.app
 
 import com.nocap.app.domain.model.DocumentReadingStatus
+import kotlin.math.roundToInt
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -50,5 +51,31 @@ class ReadingStatusUnitTest {
         // User marks as completed directly
         status = DocumentReadingStatus.COMPLETED
         assertEquals(DocumentReadingStatus.COMPLETED, status)
+    }
+
+    @Test
+    fun readingProgression_percentageFormatting_reaches100Percent() {
+        fun formatProgress(rawProgression: Double?, isCompleted: Boolean = false): Int {
+            if (isCompleted || (rawProgression != null && rawProgression >= 0.98)) return 100
+            if (rawProgression == null) return 0
+            return (rawProgression * 100).roundToInt().coerceIn(0, 100)
+        }
+
+        // Test normal values
+        assertEquals(0, formatProgress(0.0))
+        assertEquals(25, formatProgress(0.25))
+        assertEquals(50, formatProgress(0.504))
+        assertEquals(51, formatProgress(0.506))
+
+        // Test near-end values that previously stuck at 98% or 99%
+        assertEquals(100, formatProgress(0.98))
+        assertEquals(100, formatProgress(0.985))
+        assertEquals(100, formatProgress(0.99))
+        assertEquals(100, formatProgress(0.999))
+        assertEquals(100, formatProgress(1.0))
+
+        // When book is completed, it should always be 100% regardless of raw progression
+        assertEquals(100, formatProgress(0.0, isCompleted = true))
+        assertEquals(100, formatProgress(0.85, isCompleted = true))
     }
 }

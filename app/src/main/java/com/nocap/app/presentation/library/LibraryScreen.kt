@@ -27,6 +27,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlin.math.roundToInt
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -1900,21 +1901,25 @@ private fun DocumentCardItem(
 
                 // Progress Indicator
                 val progress = libraryBook.readingProgress
-                if (progress != null && progress.progression > 0f) {
+                val isCompleted = book.readingStatus == DocumentReadingStatus.COMPLETED
+                if ((progress != null && progress.progression > 0f) || isCompleted) {
                     Spacer(modifier = Modifier.height(6.dp))
+                    val pct = if (isCompleted || (progress?.progression ?: 0f) >= 0.98f) 100
+                        else ((progress?.progression ?: 0f) * 100).roundToInt().coerceIn(0, 100)
+                    val visualProgress = if (isCompleted || pct == 100) 1f else (progress?.progression ?: 0f).coerceIn(0f, 1f)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         LinearProgressIndicator(
-                            progress = { progress.progression },
+                            progress = { visualProgress },
                             modifier = Modifier
                                 .weight(1f)
                                 .height(6.dp)
                                 .clip(RoundedCornerShape(3.dp))
                         )
                         Text(
-                            text = "${(progress.progression * 100).toInt()}%",
+                            text = "$pct%",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.SemiBold

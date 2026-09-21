@@ -14,6 +14,8 @@ import com.nocap.app.data.catalog.CloudCatalog
 import com.nocap.app.domain.model.Announcement
 import com.nocap.app.domain.model.CatalogBook
 import com.nocap.app.domain.model.Category
+import kotlin.math.roundToInt
+import com.nocap.app.domain.model.DocumentReadingStatus
 import com.nocap.app.domain.model.HighlightWithBook
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -97,7 +99,8 @@ class HomeViewModel(
             val author     = localBook?.userAuthorOverride ?: localBook?.author ?: cloudBook?.author ?: ""
             val coverUrl   = localBook?.customCoverPath ?: localBook?.coverUrl ?: cloudBook?.coverUrl
             val formatName = localBook?.format?.name ?: cloudBook?.format?.name ?: "EPUB"
-            val percent    = (progress.progression * 100).toInt().coerceIn(0, 100)
+            val isCompleted = localBook?.readingStatus == DocumentReadingStatus.COMPLETED || progress.progression >= 0.98f
+            val percent    = if (isCompleted) 100 else (progress.progression * 100).roundToInt().coerceIn(0, 100)
             ContinueReadingItem(
                 bookId = progress.bookId, title = title, author = author,
                 coverUrl = coverUrl, formatName = formatName,
