@@ -66,11 +66,20 @@ class SyncEngine(private val context: Context, private val profile: String) {
             else -> cursor.getString(i)
         }) }
     }
-    private fun identity(kind: String, key: String): Pair<String,Long> {
-        db.query("SELECT remote_id,version FROM sync_versions WHERE kind=? AND local_key=?",arrayOf<Any>(kind,key)).use { if(it.moveToFirst())return it.getString(0) to it.getLong(1) }
+    private data class Identity(val id: String,val version: Long,val deleted: Boolean)
+    private fun identity(kind: String, key: String): Identity {
+        db.query("SELECT remote_id,version,deleted FROM sync_versions WHERE kind=? AND local_key=?",arrayOf<Any>(kind,key)).use {
+            if(it.moveToFirst())return Identity(it.getString(0),it.getLong(1),it.getInt(2)==1)
+        }
         val id=UUID.nameUUIDFromBytes("nocap-sync-v1:$kind:$key".toByteArray()).toString()
-        db.execSQL("INSERT INTO sync_versions(kind,local_key,remote_id) VALUES(?,?,?)",arrayOf<Any>(kind,key,id))
-        return id to 0L
+        val remote=db.query("SELECT version,deleted FROM sync_remote_heads WHERE kind=? AND remote_id=?",arrayOf<Any>(kind,id)).use {
+            if(it.moveToFirst())it.getLong(0) to (it.getInt(1)==1) else null
+        }
+        db.execSQL(
+            "INSERT INTO sync_versions(kind,local_key,remote_id,version,deleted) VALUES(?,?,?,?,?)",
+            arrayOf<Any>(kind,key,id,remote?.first ?: 0L,if(remote?.second==true)1 else 0)
+        )
+        return Identity(id,remote?.first ?: 0L,remote?.second==true)
     }
     private fun hash(file: File): String {
         val digest=MessageDigest.getInstance("SHA-256")
@@ -109,12 +118,12 @@ class SyncEngine(private val context: Context, private val profile: String) {
             val payload=if(deleted)JSONObject() else row(kind,key) ?: continue
             if(kind=="reading_sessions"&&!deleted&&payload.isNull("ended_at"))continue
             if(kind=="catalog_books"&&!deleted)prepareDocument(payload)
-            val (id,version)=identity(kind,key)
-            val op=JSONObject().put("opId",UUID.randomUUID().toString()).put("kind",kind).put("id",id).put("baseVersion",version).put("deleted",deleted).put("payload",payload)
-            if(!deleted && kind in setOf("favorites","book_tag_cross_ref","book_collection_cross_ref")) {
-                val tombstone=db.query("SELECT deleted FROM sync_versions WHERE kind=? AND local_key=?",arrayOf<Any>(kind,key)).use { it.moveToFirst() && it.getInt(0)==1 }
-                if(tombstone)op.put("recreate",true)
-            }
+            val identity=identity(kind,key)
+            val op=JSONObject().put("opId",UUID.randomUUID().toString()).put("kind",kind).put("id",identity.id).put("baseVersion",identity.version).put("deleted",deleted).put("payload",payload)
+            // A local row that exists after this account has observed its server
+            // tombstone is an explicit recreation (for example, cloud restore).
+            // Stale devices that have not observed the tombstone still conflict.
+            if(!deleted && identity.deleted)op.put("recreate",true)
             check(op.toString().length<=32768) { "Bản ghi quá lớn; dữ liệu vẫn được giữ trên máy" }
             val bytes=op.toString().toByteArray(Charsets.UTF_8).size
             if(batchBytes+bytes>450*1024)break

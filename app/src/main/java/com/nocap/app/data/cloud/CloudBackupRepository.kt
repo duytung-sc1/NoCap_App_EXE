@@ -11,6 +11,7 @@ import com.nocap.app.core.database.AppDatabase
 import com.nocap.app.data.auth.CloudAuthRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.withLock
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.MediaType.Companion.toMediaType
@@ -25,6 +26,8 @@ import java.util.concurrent.TimeUnit
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
+import com.nocap.app.data.sync.SyncEngine
+import com.nocap.app.data.sync.SyncScheduler
 
 class CloudBackupRepository(private val context: Context) {
     private val profile = com.nocap.app.data.sync.Profiles.active.value
@@ -115,8 +118,12 @@ class CloudBackupRepository(private val context: Context) {
             "Đã sao lưu thư viện lên đám mây (${file.length()/1024/1024} MiB)."
         } finally { file.delete() }
     } }
-    suspend fun restore(): Result<String> = withContext(Dispatchers.IO) { runCatching {
+    suspend fun restore(): Result<String> = withContext(Dispatchers.IO) { SyncScheduler.lock.withLock { runCatching {
         val session=token()
+        // Pull the latest tombstones before replacing the local snapshot. This lets
+        // restored rows explicitly recreate records deleted on another device or
+        // before a reinstall instead of being removed again moments later.
+        SyncEngine(context,profile).run()
         val manifest=call("backup",session).use { JSONObject(it.body!!.string()) }
         check(manifest.getInt("version")==1) { "Phiên bản sao lưu không được hỗ trợ" }
         val chunks=manifest.getJSONArray("chunks")
@@ -148,7 +155,9 @@ class CloudBackupRepository(private val context: Context) {
                 val db=database.openHelper.writableDatabase
                 val known=tables();check(rows.keys().asSequence().toSet()==known.toSet()) { "Cấu trúc dữ liệu không hợp lệ" }
                 db.execSQL("PRAGMA defer_foreign_keys=ON")
+                BackupRestoreSyncState.prepare(db)
                 known.reversed().forEach { db.execSQL("DELETE FROM \"$it\"") }
+                BackupRestoreSyncState.observeRestoredRows(db)
                 for(table in known) {
                     val columns=db.query("PRAGMA table_info(\"$table\")").use { cursor -> buildSet { while(cursor.moveToNext()) add(cursor.getString(1)) } }
                     val blobColumns=db.query("PRAGMA table_info(\"$table\")").use { cursor -> buildSet {
@@ -192,8 +201,9 @@ class CloudBackupRepository(private val context: Context) {
             committed=true;dbFile.delete()
             data.optJSONObject("preferences")?.let { CloudPreferences(context).restore(it) }
             database.invalidationTracker.refreshVersionsAsync()
+            SyncScheduler.now(context,profile)
             "Đã khôi phục thư viện. Đóng và mở lại ứng dụng để tải lại toàn bộ dữ liệu."
         } finally { zipFile.delete();if(!committed) { staging.deleteRecursively();restoredFonts.forEach { it.delete() } } }
-    } }
+    } } }
     suspend fun deleteBackup(): Result<String> = withContext(Dispatchers.IO) { runCatching { call("backup",token(requireCloud=false),"DELETE").close();"Đã xóa bản sao lưu trên đám mây." } }
 }

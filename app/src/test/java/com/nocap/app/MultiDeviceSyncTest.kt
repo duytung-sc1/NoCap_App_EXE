@@ -3,6 +3,7 @@ package com.nocap.app
 import com.nocap.app.core.database.AppDatabase
 import com.nocap.app.data.sync.Profiles
 import com.nocap.app.data.sync.SyncSchema
+import com.nocap.app.data.cloud.BackupRestoreSyncState
 import org.junit.Assert.*
 import org.junit.Test
 import java.sql.DriverManager
@@ -83,6 +84,35 @@ class MultiDeviceSyncTest {
             assertEquals(0,db.count("sync_outbox"));db.rollback()
             assertEquals(0,db.count("highlights"))
             db.createStatement().use { s -> s.executeQuery("SELECT cursor,applying FROM sync_control").use { it.next();assertEquals(0,it.getInt(1));assertEquals(0,it.getInt(2)) } }
+        }
+    }
+    @Test fun `backup restore discards stale protocol state without emitting delete tombstones`() {
+        database().use { db ->
+            db.exec("INSERT INTO highlights VALUES('old','before restore')")
+            db.exec("INSERT INTO sync_pending(op_id,kind,local_key,revision,operation) VALUES('pending','highlights','6F6C64',1,'{}')")
+            db.exec("INSERT INTO sync_inbox(seq,payload) VALUES(20,'{}')")
+            db.exec("INSERT INTO sync_blobs(hash,path) VALUES('${"a".repeat(64)}','old-file')")
+            db.exec("UPDATE sync_control SET cursor=12,fetch_cursor=20")
+
+            db.autoCommit=false
+            BackupRestoreSyncState.prepareStatements.forEach { db.exec(it) }
+            db.exec("DELETE FROM highlights")
+            db.exec(BackupRestoreSyncState.observeRestoredRows)
+            db.exec("INSERT INTO highlights VALUES('restored','from backup')")
+            db.commit()
+
+            assertEquals(0,db.count("sync_pending"))
+            assertEquals(0,db.count("sync_inbox"))
+            assertEquals(0,db.count("sync_blobs"))
+            assertEquals(1,db.count("sync_outbox"))
+            db.createStatement().use { statement ->
+                statement.executeQuery("SELECT local_key,deleted FROM sync_outbox").use {
+                    it.next();assertEquals("726573746F726564",it.getString(1));assertEquals(0,it.getInt(2))
+                }
+                statement.executeQuery("SELECT cursor,fetch_cursor,applying FROM sync_control").use {
+                    it.next();assertEquals(12,it.getInt(1));assertEquals(12,it.getInt(2));assertEquals(0,it.getInt(3))
+                }
+            }
         }
     }
     @Test fun `deletion emits tombstone and membership identities are independent`() {
