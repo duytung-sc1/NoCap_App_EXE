@@ -47,7 +47,11 @@ fun PlanCard() {
     var order by remember { mutableStateOf<BankTransferOrder?>(null) }
     LaunchedEffect(play) { play.connect() }
 
-    val pro = EntitlementPolicy.allows(Feature.MULTI_DEVICE_SYNC, state.entitlement, repo.activeUser())
+    val pro = state.entitlement?.let {
+        it.userId == repo.activeUser() && it.plan == "PRO" &&
+            it.status in setOf("ACTIVE", "IN_GRACE_PERIOD", "CANCELED") &&
+            (it.expiresAt == 0L || it.expiresAt > System.currentTimeMillis())
+    } == true
     val purchaseAvailable = com.nocap.app.BuildConfig.PLAY_PRO_PRODUCT_ID.isNotBlank() &&
         state.entitlement?.let { it.userId == repo.activeUser() && it.configured } == true
 
@@ -97,7 +101,7 @@ fun PlanCard() {
             }
 
             Text(
-                text = "Free luôn giữ quyền đọc, nhập tài liệu, dấu trang, ghi chú và thư viện offline. Pro thêm đồng bộ và lưu trữ đám mây.",
+                text = "Gói Miễn phí hiện đã bao gồm toàn bộ tính năng đồng bộ và lưu trữ đám mây. Gói Pro đang được chuẩn bị với các tính năng mới sắp ra mắt.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

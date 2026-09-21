@@ -16,15 +16,17 @@ data class Entitlement(val userId: String, val plan: String = "FREE", val status
     }
 }
 object EntitlementPolicy {
-    private val cloud=setOf(Feature.MULTI_DEVICE_SYNC,Feature.PRIVATE_CLOUD,Feature.CLOUD_BACKUP)
+    // Toàn bộ tính năng hiện tại (đồng bộ, cloud, backup) đã được mở miễn phí cho mọi người dùng.
+    // Danh sách tính năng Pro để trống, sẵn sàng cho các tính năng mới sau này.
+    private val proFeatures = emptySet<Feature>()
     fun allows(feature: Feature, state: Entitlement?, userId: String?, now: Long = System.currentTimeMillis()): Boolean {
-        if(feature !in cloud)return true
-        return state!=null && userId!=null && state.userId==userId && state.plan=="PRO" &&
-            state.status in setOf("ACTIVE","IN_GRACE_PERIOD","CANCELED") && state.expiresAt>now &&
-            state.updatedAt<=now+300_000 && now-state.updatedAt<=24*60*60*1000L
+        if (feature !in proFeatures) return true
+        return state != null && userId != null && state.userId == userId && state.plan == "PRO" &&
+            state.status in setOf("ACTIVE", "IN_GRACE_PERIOD", "CANCELED") && state.expiresAt > now &&
+            state.updatedAt <= now + 300_000 && now - state.updatedAt <= 24 * 60 * 60 * 1000L
     }
-    inline fun <T> withAccess(feature: Feature, state: Entitlement?, userId: String?, now: Long = System.currentTimeMillis(), action: ()->T): T {
-        if(!allows(feature,state,userId,now))throw ProRequired()
+    inline fun <T> withAccess(feature: Feature, state: Entitlement?, userId: String?, now: Long = System.currentTimeMillis(), action: () -> T): T {
+        if (!allows(feature, state, userId, now)) throw ProRequired()
         return action()
     }
 }
