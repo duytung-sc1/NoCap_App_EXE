@@ -35,7 +35,9 @@ data class ReviewQueueUiState(
     val againCount: Int = 0,
     val hardCount: Int = 0,
     val goodCount: Int = 0,
-    val easyCount: Int = 0
+    val easyCount: Int = 0,
+    val errorMessage: String? = null,
+    val timedOut: Boolean = false
 ) {
     val currentItem: ReviewItemWithDetails?
         get() = items.getOrNull(currentIndex)
@@ -50,40 +52,52 @@ class ReviewQueueViewModel(
     private val _uiState = MutableStateFlow(ReviewQueueUiState())
     val uiState: StateFlow<ReviewQueueUiState> = _uiState.asStateFlow()
     private var timerJob: kotlinx.coroutines.Job? = null
+    private var loadJob: kotlinx.coroutines.Job? = null
 
     init {
         loadDueItems()
     }
 
     fun loadDueItems(mode: SessionMode = SessionMode.STANDARD) {
+        loadJob?.cancel()
         timerJob?.cancel()
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, sessionMode = mode) }
-            val now = System.currentTimeMillis()
-            val due = withContext(Dispatchers.IO) {
-                reviewRepository.getDueItemsWithDetails(now)
-            }
-            val filtered = if (mode.maxItems != null) due.take(mode.maxItems) else due
-            val initialSeconds = mode.durationMinutes?.let { it * 60 }
-            _uiState.update {
-                it.copy(
-                    isLoading = false,
-                    isSubmitting = false,
-                    items = filtered,
-                    currentIndex = 0,
-                    completedCount = 0,
-                    isSessionComplete = filtered.isEmpty(),
-                    sessionMode = mode,
-                    remainingSeconds = initialSeconds,
-                    againCount = 0,
-                    hardCount = 0,
-                    goodCount = 0,
-                    easyCount = 0
-                )
-            }
+        loadJob = viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, items = emptyList(), sessionMode = mode, errorMessage = null, timedOut = false) }
+            try {
+                val now = System.currentTimeMillis()
+                val due = withContext(Dispatchers.IO) {
+                    reviewRepository.getDueItemsWithDetails(now)
+                }
+                val filtered = if (mode.maxItems != null) due.take(mode.maxItems) else due
+                val initialSeconds = mode.durationMinutes?.let { it * 60 }
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        isSubmitting = false,
+                        items = filtered,
+                        currentIndex = 0,
+                        completedCount = 0,
+                        isSessionComplete = filtered.isEmpty(),
+                        sessionMode = mode,
+                        remainingSeconds = initialSeconds,
+                        againCount = 0,
+                        hardCount = 0,
+                        goodCount = 0,
+                        easyCount = 0,
+                        errorMessage = null,
+                        timedOut = false
+                    )
+                }
 
-            if (initialSeconds != null && filtered.isNotEmpty()) {
-                startTimer()
+                if (initialSeconds != null && filtered.isNotEmpty()) {
+                    startTimer()
+                }
+            } catch (error: kotlinx.coroutines.CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                _uiState.update {
+                    it.copy(isLoading = false, isSessionComplete = false, errorMessage = "Không tải được danh sách ôn tập. Hãy thử lại.")
+                }
             }
         }
     }
@@ -95,7 +109,7 @@ class ReviewQueueViewModel(
                 kotlinx.coroutines.delay(1000)
                 val current = _uiState.value.remainingSeconds ?: break
                 if (current <= 1) {
-                    _uiState.update { it.copy(remainingSeconds = 0, isSessionComplete = true) }
+                    _uiState.update { it.copy(remainingSeconds = 0, isSessionComplete = true, timedOut = true) }
                     break
                 } else {
                     _uiState.update { it.copy(remainingSeconds = current - 1) }
@@ -107,15 +121,17 @@ class ReviewQueueViewModel(
     fun answerCurrent(rating: ReviewRating) {
         if (_uiState.value.isSubmitting) return
         val current = _uiState.value.currentItem ?: return
-        _uiState.update { it.copy(isSubmitting = true) }
+        _uiState.update { it.copy(isSubmitting = true, errorMessage = null) }
         viewModelScope.launch {
             try {
                 val now = System.currentTimeMillis()
-                withContext(Dispatchers.IO) {
+                val result = withContext(Dispatchers.IO) {
                     reviewRepository.submitReview(current.reviewItem, rating, now)
                 }
+                result.getOrThrow()
                 val nextIndex = _uiState.value.currentIndex + 1
-                val isDone = nextIndex >= _uiState.value.items.size
+                val isDone = nextIndex >= _uiState.value.items.size ||
+                    _uiState.value.remainingSeconds == 0 || _uiState.value.isSessionComplete
                 if (isDone) {
                     timerJob?.cancel()
                 }
@@ -131,14 +147,15 @@ class ReviewQueueViewModel(
                         easyCount = it.easyCount + if (rating == ReviewRating.EASY) 1 else 0
                     )
                 }
-            } catch (e: Exception) {
-                _uiState.update { it.copy(isSubmitting = false) }
+            } catch (_: Exception) {
+                _uiState.update { it.copy(isSubmitting = false, errorMessage = "Chưa lưu được kết quả ôn tập. Hãy thử lại.") }
             }
         }
     }
 
     override fun onCleared() {
         super.onCleared()
+        loadJob?.cancel()
         timerJob?.cancel()
     }
 

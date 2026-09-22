@@ -579,5 +579,27 @@ class DatabaseMigrationTest {
 
         conn.close()
     }
+
+    @Test
+    fun `test MIGRATION_6_7 creates note history without altering existing tables`() {
+        val executedSqls = mutableListOf<String>()
+        val dbProxy = Proxy.newProxyInstance(
+            SupportSQLiteDatabase::class.java.classLoader,
+            arrayOf(SupportSQLiteDatabase::class.java)
+        ) { _, method, args ->
+            if (method.name == "execSQL") executedSqls.add(args[0] as String)
+            null
+        } as SupportSQLiteDatabase
+
+        assertEquals(6, AppDatabase.MIGRATION_6_7.startVersion)
+        assertEquals(7, AppDatabase.MIGRATION_6_7.endVersion)
+        AppDatabase.MIGRATION_6_7.migrate(dbProxy)
+
+        assertTrue(executedSqls.any { it.contains("CREATE TABLE IF NOT EXISTS `highlight_note_versions`") })
+        assertTrue(executedSqls.any { it.contains("FOREIGN KEY(`highlight_id`) REFERENCES `highlights`(`id`) ON DELETE CASCADE") })
+        assertTrue(executedSqls.any { it.contains("index_highlight_note_versions_highlight_id") })
+        assertTrue(executedSqls.any { it.contains("index_highlight_note_versions_created_at") })
+        assertTrue(executedSqls.none { it.contains("DROP TABLE", ignoreCase = true) || it.contains("DELETE FROM", ignoreCase = true) })
+    }
 }
 

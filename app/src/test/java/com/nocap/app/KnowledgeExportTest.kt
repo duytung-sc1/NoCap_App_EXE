@@ -223,4 +223,3 @@ class KnowledgeExportTest {
         assertFalse("Must not contain unescaped raw CRLF", tsv.contains("\r\n"))
     }
 }
-

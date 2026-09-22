@@ -29,6 +29,9 @@ class EntitlementTest {
             for(state in listOf(null, Entitlement("a"), pro().copy(status="EXPIRED", expiresAt=now-1))) {
                 assertFalse(feature.name, EntitlementPolicy.allows(feature, state, "a", now))
             }
+            assertFalse("${feature.name}: zero expiry", EntitlementPolicy.allows(feature, pro().copy(expiresAt=0), "a", now))
+            assertFalse("${feature.name}: stale cache", EntitlementPolicy.allows(feature, pro().copy(updatedAt=now-24*60*60*1000L-1), "a", now))
+            assertFalse("${feature.name}: wrong account", EntitlementPolicy.allows(feature, pro(), "b", now))
             // Active Pro -> true
             assertTrue(feature.name, EntitlementPolicy.allows(feature, pro(), "a", now))
         }

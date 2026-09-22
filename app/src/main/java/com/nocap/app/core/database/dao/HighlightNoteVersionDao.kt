@@ -19,8 +19,8 @@ interface HighlightNoteVersionDao {
     @Query("SELECT * FROM highlight_note_versions WHERE highlight_id = :highlightId ORDER BY created_at DESC")
     suspend fun getVersions(highlightId: String): List<HighlightNoteVersionEntity>
 
-    @Query("SELECT * FROM highlight_note_versions WHERE id = :id LIMIT 1")
-    suspend fun getVersionById(id: String): HighlightNoteVersionEntity?
+    @Query("SELECT * FROM highlight_note_versions WHERE id = :id AND highlight_id = :highlightId LIMIT 1")
+    suspend fun getVersion(id: String, highlightId: String): HighlightNoteVersionEntity?
 
     @Query("DELETE FROM highlight_note_versions WHERE id = :id")
     suspend fun deleteById(id: String)

@@ -148,7 +148,9 @@ class CloudBackupRepository(private val context: Context) {
                     chunks.put(digest)
                 }
             }
-            val manifest = JSONObject().put("version", 1).put("chunks", chunks).put("size", file.length())
+            val deviceName = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}"
+                .trim().ifBlank { "Android" }.take(100)
+            val manifest = JSONObject().put("version", 1).put("chunks", chunks).put("size", file.length()).put("deviceName", deviceName)
             call("backup", session, "PUT", manifest.toString().toRequestBody("application/json".toMediaType())).close()
             "Đã sao lưu thư viện lên đám mây (${file.length() / 1024 / 1024} MiB)."
         } finally { file.delete() }

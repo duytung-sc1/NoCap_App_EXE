@@ -60,4 +60,29 @@ class AppLanguageUnitTest {
         assertEquals(userNote, UiTranslations.translate(userNote, AppLanguage.ENGLISH))
         assertEquals(userNote, UiTranslations.translate(userNote, AppLanguage.VIETNAMESE))
     }
+
+    @Test
+    fun advancedProScreensDoNotLeakVietnameseIntoEnglishUi() {
+        val labels = mapOf(
+            "Tự động tạo danh sách ôn tập" to "Create review queue automatically",
+            "Ôn nhanh 5 phút" to "5-minute quick review",
+            "Tiến trình ghi nhớ" to "Memory progress",
+            "Xuất và sử dụng tri thức" to "Export and use your knowledge",
+            "Lịch sử phiên bản ghi chú" to "Note version history",
+            "Khôi phục theo thời điểm" to "Restore a previous backup",
+            "Chưa lưu được kết quả ôn tập. Hãy thử lại." to "The review result could not be saved. Try again."
+        )
+        for ((vi, en) in labels) {
+            assertEquals(en, UiTranslations.translate(vi, AppLanguage.ENGLISH))
+            assertEquals(vi, UiTranslations.translate(vi, AppLanguage.VIETNAMESE))
+        }
+        assertEquals(
+            "Backup history (10)",
+            UiTranslations.translate("Lịch sử sao lưu (10)", AppLanguage.ENGLISH)
+        )
+        assertEquals(
+            "You reviewed 7 cards in this session.",
+            UiTranslations.translate("Bạn đã ôn luyện xong 7 thẻ trong phiên này.", AppLanguage.ENGLISH)
+        )
+    }
 }

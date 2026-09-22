@@ -118,7 +118,7 @@ class LocalAnnotationRepository(
 
     override suspend fun restoreNoteVersion(highlightId: String, versionId: String): Result<Unit> {
         val dao = noteVersionDao ?: return Result.failure(IllegalStateException("Version DAO not available"))
-        val version = dao.getVersionById(versionId) ?: return Result.failure(IllegalArgumentException("Không tìm thấy phiên bản ghi chú"))
+        val version = dao.getVersion(versionId, highlightId) ?: return Result.failure(IllegalArgumentException("Không tìm thấy phiên bản ghi chú"))
         return updateNote(highlightId, version.noteText)
     }
 }

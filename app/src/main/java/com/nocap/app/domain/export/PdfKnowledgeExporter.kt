@@ -24,7 +24,8 @@ object PdfKnowledgeExporter {
     private const val CONTENT_WIDTH = PAGE_WIDTH - (MARGIN * 2)
     private const val BOTTOM_LIMIT = PAGE_HEIGHT - MARGIN - 20f
 
-    private val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
+    private fun formatDate(time: Long): String =
+        SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date(time))
 
     fun exportToPdf(
         booksWithData: List<Triple<CatalogBookEntity, List<HighlightEntity>, List<BookmarkEntity>>>,
@@ -91,43 +92,69 @@ object PdfKnowledgeExporter {
                 strokeWidth = 3f
             }
 
-            fun checkPageBreak(requiredHeight: Float) {
-                if (y + requiredHeight > BOTTOM_LIMIT) {
-                    // Draw page number footer
-                    val footer = "- Trang $pageNumber -"
-                    canvas.drawText(footer, (PAGE_WIDTH - bodyPaint.measureText(footer)) / 2f, PAGE_HEIGHT - 20f, metaPaint)
-                    document.finishPage(page)
-
-                    pageNumber++
-                    pageInfo = PdfDocument.PageInfo.Builder(PAGE_WIDTH, PAGE_HEIGHT, pageNumber).create()
-                    page = document.startPage(pageInfo)
-                    canvas = page.canvas
-                    y = MARGIN
-                }
+            fun startNextPage() {
+                val footer = "- Trang $pageNumber -"
+                canvas.drawText(footer, (PAGE_WIDTH - bodyPaint.measureText(footer)) / 2f, PAGE_HEIGHT - 20f, metaPaint)
+                document.finishPage(page)
+                pageNumber++
+                pageInfo = PdfDocument.PageInfo.Builder(PAGE_WIDTH, PAGE_HEIGHT, pageNumber).create()
+                page = document.startPage(pageInfo)
+                canvas = page.canvas
+                y = MARGIN
             }
 
-            fun drawTextLayout(text: String, paint: TextPaint, xOffset: Float = 0f, width: Float = CONTENT_WIDTH): Float {
+            fun checkPageBreak(requiredHeight: Float) {
+                if (y + requiredHeight > BOTTOM_LIMIT) startNextPage()
+            }
+
+            fun drawTextLayout(
+                text: String,
+                paint: TextPaint,
+                xOffset: Float = 0f,
+                width: Float = CONTENT_WIDTH,
+                decoration: ((Canvas, Float, Float) -> Unit)? = null
+            ): Float {
                 if (text.isEmpty()) return 0f
                 val paragraphs = if (text.contains("\n")) text.split("\n") else listOf(text)
                 var totalHeight = 0f
                 for (p in paragraphs) {
                     if (p.isEmpty()) {
+                        checkPageBreak(4f)
                         y += 4f
                         totalHeight += 4f
                         continue
                     }
-                    val layout = StaticLayout.Builder.obtain(p, 0, p.length, paint, width.toInt())
-                        .setAlignment(Layout.Alignment.ALIGN_NORMAL)
-                        .setLineSpacing(2f, 1.1f)
-                        .build()
-                    checkPageBreak(layout.height.toFloat())
-                    canvas.save()
-                    canvas.translate(MARGIN + xOffset, y)
-                    layout.draw(canvas)
-                    canvas.restore()
-                    val height = layout.height.toFloat()
-                    y += height
-                    totalHeight += height
+                    var remaining = p
+                    while (remaining.isNotEmpty()) {
+                        if (y >= BOTTOM_LIMIT) startNextPage()
+                        val layout = StaticLayout.Builder.obtain(remaining, 0, remaining.length, paint, width.toInt())
+                            .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+                            .setLineSpacing(2f, 1.1f)
+                            .build()
+                        val available = (BOTTOM_LIMIT - y).toInt()
+                        var fittingLines = 0
+                        while (fittingLines < layout.lineCount && layout.getLineBottom(fittingLines) <= available) fittingLines++
+                        if (fittingLines == 0) {
+                            startNextPage()
+                            continue
+                        }
+                        val end = layout.getLineEnd(fittingLines - 1)
+                        val segment = remaining.substring(0, end)
+                        val segmentLayout = StaticLayout.Builder.obtain(segment, 0, segment.length, paint, width.toInt())
+                            .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+                            .setLineSpacing(2f, 1.1f)
+                            .build()
+                        val height = segmentLayout.height.toFloat()
+                        decoration?.invoke(canvas, y, height)
+                        canvas.save()
+                        canvas.translate(MARGIN + xOffset, y)
+                        segmentLayout.draw(canvas)
+                        canvas.restore()
+                        y += height
+                        totalHeight += height
+                        remaining = remaining.substring(end)
+                        if (remaining.isNotEmpty()) startNextPage()
+                    }
                 }
                 return totalHeight
             }
@@ -137,7 +164,7 @@ object PdfKnowledgeExporter {
         drawTextLayout(docTitle, titlePaint)
         y += 4f
 
-        val exportMeta = "Ngày xuất: ${dateFormat.format(Date())} • Tổng số tài liệu: ${booksWithData.size}"
+        val exportMeta = "Ngày xuất: ${formatDate(System.currentTimeMillis())} • Tổng số tài liệu: ${booksWithData.size}"
         drawTextLayout(exportMeta, metaPaint)
         y += 8f
 
@@ -173,22 +200,13 @@ object PdfKnowledgeExporter {
 
                     // Draw quote bar and quote text
                     val quoteText = "\"${noteItem.text.trim()}\""
-                    val quoteStartX = MARGIN + 8f
                     val quoteWidth = CONTENT_WIDTH - 12f
-                    val quoteLayout = StaticLayout.Builder.obtain(quoteText, 0, quoteText.length, quotePaint, quoteWidth.toInt())
-                        .setAlignment(Layout.Alignment.ALIGN_NORMAL)
-                        .build()
+                    drawTextLayout(quoteText, quotePaint, xOffset = 8f, width = quoteWidth) { target, top, height ->
+                        target.drawLine(MARGIN + 2f, top, MARGIN + 2f, top + height, accentBarPaint)
+                    }
+                    y += 4f
 
-                    checkPageBreak(quoteLayout.height.toFloat() + 16f)
-                    canvas.drawLine(MARGIN + 2f, y, MARGIN + 2f, y + quoteLayout.height, accentBarPaint)
-
-                    canvas.save()
-                    canvas.translate(quoteStartX, y)
-                    quoteLayout.draw(canvas)
-                    canvas.restore()
-                    y += quoteLayout.height + 4f
-
-                    val itemMeta = "Tạo lúc: ${dateFormat.format(Date(noteItem.createdAt))}"
+                    val itemMeta = "Tạo lúc: ${formatDate(noteItem.createdAt)}"
                     drawTextLayout(itemMeta, metaPaint, xOffset = 8f)
                     y += 10f
                 }
@@ -205,7 +223,7 @@ object PdfKnowledgeExporter {
                     val hlText = "${idx + 1}. \"${hlItem.text.trim()}\""
                     drawTextLayout(hlText, bodyPaint)
                     y += 2f
-                    val itemMeta = "Tạo lúc: ${dateFormat.format(Date(hlItem.createdAt))}"
+                    val itemMeta = "Tạo lúc: ${formatDate(hlItem.createdAt)}"
                     drawTextLayout(itemMeta, metaPaint, xOffset = 12f)
                     y += 8f
                 }
@@ -226,7 +244,7 @@ object PdfKnowledgeExporter {
                         drawTextLayout("\"${bm.snippet.trim()}\"", quotePaint, xOffset = 12f)
                         y += 2f
                     }
-                    val bmMeta = "Tạo lúc: ${dateFormat.format(Date(bm.createdAt))}"
+                    val bmMeta = "Tạo lúc: ${formatDate(bm.createdAt)}"
                     drawTextLayout(bmMeta, metaPaint, xOffset = 12f)
                     y += 8f
                 }

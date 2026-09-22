@@ -89,6 +89,16 @@ fun ReviewQueueScreen(
             ) {
                 CircularProgressIndicator()
             }
+        } else if (uiState.errorMessage != null && uiState.totalCount == 0) {
+            Box(
+                modifier = Modifier.fillMaxSize().padding(innerPadding).padding(24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(uiState.errorMessage.orEmpty(), textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.error)
+                    Button(onClick = { viewModel.loadDueItems(uiState.sessionMode) }) { Text("Thử lại") }
+                }
+            }
         } else if (uiState.isSessionComplete || uiState.totalCount == 0) {
             Box(
                 modifier = Modifier
@@ -116,14 +126,21 @@ fun ReviewQueueScreen(
                         )
                     }
                     Text(
-                        text = if (uiState.completedCount > 0) "Hoàn thành phiên ôn tập!" else "Không có thẻ nào",
+                        text = when {
+                            uiState.timedOut -> "Đã hết thời gian"
+                            uiState.completedCount > 0 -> "Hoàn thành phiên ôn tập!"
+                            else -> "Không có thẻ nào"
+                        },
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = if (uiState.completedCount > 0)
-                            "Bạn đã ôn luyện xong ${uiState.completedCount} thẻ trong phiên này."
-                        else "Bạn đã hoàn thành tất cả các thẻ cần ôn tập hôm nay.",
+                        text = when {
+                            uiState.timedOut && uiState.completedCount > 0 -> "Bạn đã ôn luyện xong ${uiState.completedCount} thẻ trong phiên này."
+                            uiState.timedOut -> "Phiên ôn nhanh đã kết thúc. Bạn có thể tiếp tục vào lần sau."
+                            uiState.completedCount > 0 -> "Bạn đã ôn luyện xong ${uiState.completedCount} thẻ trong phiên này."
+                            else -> "Bạn đã hoàn thành tất cả các thẻ cần ôn tập hôm nay."
+                        },
                         style = MaterialTheme.typography.bodyLarge,
                         textAlign = TextAlign.Center,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -181,6 +198,20 @@ fun ReviewQueueScreen(
             ) {
                 // Top Progress indicator
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    uiState.errorMessage?.let { message ->
+                        Surface(
+                            color = MaterialTheme.colorScheme.errorContainer,
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = message,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
+                    }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween

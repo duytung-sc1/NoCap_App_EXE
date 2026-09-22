@@ -12,7 +12,8 @@ import java.util.Locale
 
 object KnowledgeExporter {
 
-    private val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
+    private fun formatDate(time: Long): String =
+        SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date(time))
 
     fun formatDocumentKnowledge(
         book: CatalogBookEntity,
@@ -22,7 +23,7 @@ object KnowledgeExporter {
         val sb = StringBuilder()
         val title = book.userTitleOverride ?: book.title
         val author = book.userAuthorOverride ?: book.author
-        val nowFormatted = dateFormat.format(Date())
+        val nowFormatted = formatDate(System.currentTimeMillis())
 
         sb.appendLine("# $title")
         sb.appendLine("- **Tác giả:** $author")
@@ -42,7 +43,7 @@ object KnowledgeExporter {
                 sb.appendLine("### ${index + 1}. ${item.note}")
                 sb.appendLine("> ${item.text.trim()}")
                 sb.appendLine()
-                sb.appendLine("*Màu sắc: ${item.color} | Tạo lúc: ${dateFormat.format(Date(item.createdAt))}*")
+                sb.appendLine("*Màu sắc: ${item.color} | Tạo lúc: ${formatDate(item.createdAt)}*")
                 sb.appendLine()
             }
             sb.appendLine("---")
@@ -54,7 +55,7 @@ object KnowledgeExporter {
             sb.appendLine()
             plainHighlights.forEachIndexed { index, item ->
                 sb.appendLine("${index + 1}. > ${item.text.trim()}")
-                sb.appendLine("   *Màu sắc: ${item.color} | Tạo lúc: ${dateFormat.format(Date(item.createdAt))}*")
+                sb.appendLine("   *Màu sắc: ${item.color} | Tạo lúc: ${formatDate(item.createdAt)}*")
                 sb.appendLine()
             }
             sb.appendLine("---")
@@ -70,7 +71,7 @@ object KnowledgeExporter {
                 if (!item.snippet.isNullOrBlank()) {
                     sb.appendLine("   *\"${item.snippet.trim()}\"*")
                 }
-                sb.appendLine("   *Tạo lúc: ${dateFormat.format(Date(item.createdAt))}*")
+                sb.appendLine("   *Tạo lúc: ${formatDate(item.createdAt)}*")
                 sb.appendLine()
             }
         }
@@ -82,7 +83,7 @@ object KnowledgeExporter {
         booksWithData: List<Triple<CatalogBookEntity, List<HighlightEntity>, List<BookmarkEntity>>>
     ): String {
         val sb = StringBuilder()
-        val nowFormatted = dateFormat.format(Date())
+        val nowFormatted = formatDate(System.currentTimeMillis())
 
         sb.appendLine("# NoCap — Tổng hợp Ghi chú & Bộ nhớ đọc")
         sb.appendLine("- **Ngày xuất:** $nowFormatted")
@@ -107,7 +108,7 @@ object KnowledgeExporter {
         booksWithData: List<Triple<CatalogBookEntity, List<HighlightEntity>, List<BookmarkEntity>>>
     ): String {
         val sb = StringBuilder()
-        val nowFormatted = dateFormat.format(Date())
+        val nowFormatted = formatDate(System.currentTimeMillis())
 
         sb.appendLine("# NoCap — Tổng hợp theo chủ đề: $topicName")
         sb.appendLine("- **Ngày xuất:** $nowFormatted")

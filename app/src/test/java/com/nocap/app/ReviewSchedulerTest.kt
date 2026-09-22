@@ -192,4 +192,3 @@ class ReviewSchedulerTest {
         assertEquals(MemoryState.DUE, ReviewScheduler.memoryState(overdueMastered, now))
     }
 }
-

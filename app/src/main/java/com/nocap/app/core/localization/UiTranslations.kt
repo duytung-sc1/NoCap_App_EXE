@@ -436,6 +436,30 @@ internal object UiTranslations {
         match("Lần ôn: (\\d+)")?.let { m ->
             return "Reviews: ${m.groupValues[1]}"
         }
+        match("Đã thêm (\\d+) thẻ mới vào danh sách ôn tập!")?.let { m ->
+            return "Added ${m.groupValues[1]} new cards to the review queue!"
+        }
+        match("Bạn đã ôn luyện xong (\\d+) thẻ trong phiên này\\.")?.let { m ->
+            return "You reviewed ${m.groupValues[1]} cards in this session."
+        }
+        match("Lịch sử sao lưu \\((\\d+)\\)")?.let { m ->
+            return "Backup history (${m.groupValues[1]})"
+        }
+        match("(.+) • Thiết bị")?.let { m ->
+            return "${m.groupValues[1]} • Device"
+        }
+        match("Không thể tạo danh sách ôn tập: (.+)")?.let { m ->
+            return "Unable to create the review queue: ${m.groupValues[1]}"
+        }
+        match("Dữ liệu hiện tại sẽ được thay thế bằng bản sao lưu lúc (.+) \\((.+) MB\\)\\. Thao tác này sẽ ghi đè thư viện hiện tại\\.")?.let { m ->
+            return "The current library will be replaced by the backup from ${m.groupValues[1]} (${m.groupValues[2]} MB). This overwrites the current library."
+        }
+        match("Bản sao lưu lúc (.+) \\((.+) MB\\) sẽ bị xóa vĩnh viễn khỏi đám mây\\.")?.let { m ->
+            return "The backup from ${m.groupValues[1]} (${m.groupValues[2]} MB) will be permanently deleted from the cloud."
+        }
+        match("Bản sao lưu (.+)")?.let { m ->
+            return "Backup ${m.groupValues[1]}"
+        }
         match("(?:Lỗi lưu ảnh bìa|Lỗi xác thực|Máy chủ backend chưa khả dụng|Tải thất bại): (.+)")?.let { m ->
             return "Error: ${m.groupValues[1]}"
         }
