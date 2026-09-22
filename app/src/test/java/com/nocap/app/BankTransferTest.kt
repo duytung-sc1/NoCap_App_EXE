@@ -35,4 +35,15 @@ class BankTransferTest {
         val order = BankTransferOrder.parse(json)
         assertTrue(runCatching { BankApp("x", "Bad", "https://evil.example/pay", false, 0).paymentUrl(order) }.isFailure)
     }
+
+    @Test
+    fun `payment response supports fallbackQrUrl and img vietqr io`() {
+        val order = BankTransferOrder.parse(json)
+        assertTrue(order.fallbackQrUrl.startsWith("https://img.vietqr.io/image/vcb-1017588888-qr_only.png"))
+        assertTrue(order.fallbackQrUrl.contains("amount=99000"))
+        assertTrue(order.fallbackQrUrl.contains("addInfo=NC0123456789ABCDEF"))
+
+        val parsedAlternate = BankTransferOrder.parse(json.replace("https://vietqr.app/img", "https://img.vietqr.io/image/vcb-1017588888-qr_only.png"))
+        assertEquals("https://img.vietqr.io/image/vcb-1017588888-qr_only.png?acc=1017588888&bank=Vietcombank&amount=99000&des=NC0123456789ABCDEF", parsedAlternate.qrUrl)
+    }
 }

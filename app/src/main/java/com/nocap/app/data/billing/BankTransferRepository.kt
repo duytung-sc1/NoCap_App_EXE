@@ -33,6 +33,9 @@ data class BankTransferOrder(
     val bank: BankRecipient,
     val qrUrl: String
 ) {
+    val fallbackQrUrl: String
+        get() = "https://img.vietqr.io/image/${bank.vietQrBankId}-${bank.accountNumber}-qr_only.png?amount=${amount}&addInfo=${paymentContent}&accountName=${java.net.URLEncoder.encode(bank.accountHolder, "UTF-8")}"
+
     companion object {
         fun parse(raw: String): BankTransferOrder {
             val data = JSONObject(raw)
@@ -53,7 +56,7 @@ data class BankTransferOrder(
                     accountHolder = bank.getString("accountHolder"),
                     vietQrBankId = bank.getString("vietQrBankId").also { require(Regex("[a-z0-9-]{2,20}").matches(it)) }
                 ),
-                qrUrl = data.getString("qrUrl").also { require(it.toHttpUrlOrNull()?.let { url -> url.isHttps && url.host == "vietqr.app" } == true) }
+                qrUrl = data.getString("qrUrl").also { require(it.toHttpUrlOrNull()?.let { url -> url.isHttps && (url.host == "vietqr.app" || url.host == "img.vietqr.io") } == true) }
             )
         }
     }
