@@ -51,9 +51,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         TagEntity::class,
         BookTagCrossRef::class,
         ReviewItemEntity::class,
-        ReadingSessionEntity::class
+        ReadingSessionEntity::class,
+        com.nocap.app.core.database.entity.HighlightNoteVersionEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -70,11 +71,30 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun tagDao(): TagDao
     abstract fun reviewDao(): ReviewDao
     abstract fun readingSessionDao(): ReadingSessionDao
+    abstract fun highlightNoteVersionDao(): com.nocap.app.core.database.dao.HighlightNoteVersionDao
 
     companion object {
         @Volatile
         private var INSTANCE: AppDatabase? = null
         private val profileInstances = mutableMapOf<String, AppDatabase>()
+
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `highlight_note_versions` (
+                        `id` TEXT NOT NULL,
+                        `highlight_id` TEXT NOT NULL,
+                        `note_text` TEXT NOT NULL,
+                        `created_at` INTEGER NOT NULL,
+                        PRIMARY KEY(`id`),
+                        FOREIGN KEY(`highlight_id`) REFERENCES `highlights`(`id`) ON DELETE CASCADE
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_highlight_note_versions_highlight_id` ON `highlight_note_versions` (`highlight_id`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_highlight_note_versions_created_at` ON `highlight_note_versions` (`created_at`)")
+            }
+        }
+
         val MIGRATION_5_6 = object : Migration(5, 6) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 com.nocap.app.data.sync.SyncSchema.install { db.execSQL(it) }
@@ -285,7 +305,7 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     com.nocap.app.data.sync.Profiles.databaseName(profile)
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                     .addCallback(object : Callback() {
                         override fun onOpen(db: SupportSQLiteDatabase) {
                             com.nocap.app.data.sync.SyncSchema.install { db.execSQL(it) }

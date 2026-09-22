@@ -17,4 +17,6 @@ interface AnnotationRepository {
     suspend fun updateNote(highlightId: String, note: String?): Result<Unit>
     suspend fun deleteHighlight(highlightId: String): Result<Unit>
     suspend fun deleteHighlightsForBook(bookId: String): Result<Unit>
+    suspend fun getNoteVersions(highlightId: String): List<com.nocap.app.core.database.entity.HighlightNoteVersionEntity>
+    suspend fun restoreNoteVersion(highlightId: String, versionId: String): Result<Unit>
 }

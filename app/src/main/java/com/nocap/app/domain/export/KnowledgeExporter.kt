@@ -102,9 +102,94 @@ object KnowledgeExporter {
         return sb.toString()
     }
 
+    fun formatTopicKnowledge(
+        topicName: String,
+        booksWithData: List<Triple<CatalogBookEntity, List<HighlightEntity>, List<BookmarkEntity>>>
+    ): String {
+        val sb = StringBuilder()
+        val nowFormatted = dateFormat.format(Date())
+
+        sb.appendLine("# NoCap — Tổng hợp theo chủ đề: $topicName")
+        sb.appendLine("- **Ngày xuất:** $nowFormatted")
+        sb.appendLine("- **Số tài liệu liên quan:** ${booksWithData.size}")
+        sb.appendLine()
+        sb.appendLine("---")
+        sb.appendLine()
+
+        for ((book, highlights, bookmarks) in booksWithData) {
+            val content = formatDocumentKnowledge(book, highlights, bookmarks)
+            sb.appendLine(content)
+            sb.appendLine()
+            sb.appendLine("==========================================")
+            sb.appendLine()
+        }
+
+        return sb.toString()
+    }
+
+    private fun escapeAnkiField(text: String): String {
+        return text
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace("\"", "&quot;")
+            .replace("\t", " ")
+            .replace("\r\n", "<br>")
+            .replace("\r", "<br>")
+            .replace("\n", "<br>")
+    }
+
+    /**
+     * Formats highlights into Anki/Quizlet-compatible TSV (Tab-Separated Values).
+     * Column 1: Front (Note or Question prompt)
+     * Column 2: Back (Quote, Source, Author)
+     * Column 3: Tags (NoCap, Book title)
+     */
+    fun formatAnkiCards(
+        highlightsWithBook: List<com.nocap.app.domain.model.HighlightWithBook>
+    ): String {
+        val sb = StringBuilder()
+        // Header
+        sb.appendLine("#separator:tab")
+        sb.appendLine("#html:true")
+        sb.appendLine("#tags column:3")
+
+        for (item in highlightsWithBook) {
+            val hl = item.highlight
+            val book = item.book
+            val bookTitle = (book.userTitleOverride ?: book.title).replace("\t", " ").replace("\r", " ").replace("\n", " ")
+            val bookAuthor = (book.userAuthorOverride ?: book.author).replace("\t", " ").replace("\r", " ").replace("\n", " ")
+
+            val front = if (!hl.note.isNullOrBlank()) {
+                escapeAnkiField(hl.note)
+            } else {
+                "Điểm nhấn từ <i>${escapeAnkiField(bookTitle)}</i>"
+            }
+
+            val back = buildString {
+                append("<blockquote>\"${escapeAnkiField(hl.text.trim())}\"</blockquote>")
+                if (!hl.note.isNullOrBlank()) {
+                    append("<br><b>Ghi chú:</b> ${escapeAnkiField(hl.note)}")
+                }
+                append("<br><small style='color:gray;'>— ${escapeAnkiField(bookTitle)} (${escapeAnkiField(bookAuthor)})</small>")
+            }
+
+            val safeTag = bookTitle.replace(Regex("[^a-zA-Z0-9_À-ỹ]"), "_").take(30)
+            val tags = "NoCap $safeTag"
+
+            sb.append(front).append("\t").append(back).append("\t").append(tags).append("\n")
+        }
+
+        return sb.toString()
+    }
+
     fun writeMarkdownToStream(outputStream: OutputStream, markdown: String) {
+        writeStringToStream(outputStream, markdown)
+    }
+
+    fun writeStringToStream(outputStream: OutputStream, content: String) {
         OutputStreamWriter(outputStream, StandardCharsets.UTF_8).use { writer ->
-            writer.write(markdown)
+            writer.write(content)
             writer.flush()
         }
     }

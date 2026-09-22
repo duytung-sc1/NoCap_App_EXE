@@ -2,7 +2,11 @@ package com.nocap.app.data.billing
 
 import org.json.JSONObject
 
-enum class Feature { LOCAL_IMPORT, LOCAL_READING, OFFLINE_LIBRARY, BOOKMARKS, HIGHLIGHTS, NOTES, TAGS_COLLECTIONS, READING_MEMORY, MULTI_DEVICE_SYNC, PRIVATE_CLOUD, CLOUD_BACKUP }
+enum class Feature {
+    LOCAL_IMPORT, LOCAL_READING, OFFLINE_LIBRARY, BOOKMARKS, HIGHLIGHTS, NOTES,
+    TAGS_COLLECTIONS, READING_MEMORY, MULTI_DEVICE_SYNC, PRIVATE_CLOUD, CLOUD_BACKUP,
+    ADVANCED_READING_MEMORY, KNOWLEDGE_EXPORT, ADVANCED_CLOUD
+}
 data class Entitlement(val userId: String, val plan: String = "FREE", val status: String = "NONE", val expiresAt: Long = 0,
     val updatedAt: Long = 0, val productId: String? = null, val accountId: String = "", val autoRenew: Boolean = false, val configured: Boolean = false) {
     fun toJson() = JSONObject().put("userId",userId).put("plan",plan).put("status",status).put("expiresAt",expiresAt)
@@ -16,9 +20,12 @@ data class Entitlement(val userId: String, val plan: String = "FREE", val status
     }
 }
 object EntitlementPolicy {
-    // Toàn bộ tính năng hiện tại (đồng bộ, cloud, backup) đã được mở miễn phí cho mọi người dùng.
-    // Danh sách tính năng Pro để trống, sẵn sàng cho các tính năng mới sau này.
-    private val proFeatures = emptySet<Feature>()
+    // Các tính năng Pro mới: Reading Memory nâng cao, Xuất tri thức và Cloud nâng cao
+    private val proFeatures = setOf(
+        Feature.ADVANCED_READING_MEMORY,
+        Feature.KNOWLEDGE_EXPORT,
+        Feature.ADVANCED_CLOUD
+    )
     fun allows(feature: Feature, state: Entitlement?, userId: String?, now: Long = System.currentTimeMillis()): Boolean {
         if (feature !in proFeatures) return true
         return state != null && userId != null && state.userId == userId && state.plan == "PRO" &&

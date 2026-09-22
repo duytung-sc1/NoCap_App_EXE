@@ -16,6 +16,7 @@ import com.nocap.app.data.auth.CloudAuthRepository
 import com.nocap.app.data.auth.GoogleSignInHelper
 import com.nocap.app.data.auth.LocalDeviceRepository
 import com.nocap.app.data.cloud.CloudBackupRepository
+import com.nocap.app.data.cloud.CloudBackupSnapshot
 import com.nocap.app.domain.model.AuthState
 import com.nocap.app.domain.model.AuthUser
 import com.nocap.app.domain.model.UserProfile
@@ -49,10 +50,35 @@ class SettingsViewModel(
     val authState: StateFlow<AuthState> = authRepository.authState
     val cloudBusy = MutableStateFlow(false)
     val cloudMessage = MutableStateFlow<String?>(null)
+    private val _snapshots = MutableStateFlow<List<CloudBackupSnapshot>>(emptyList())
+    val snapshots: StateFlow<List<CloudBackupSnapshot>> = _snapshots.asStateFlow()
 
-    fun backupLibrary() = runCloud { it.backup() }
-    fun restoreLibrary() = runCloud { it.restore() }
-    fun deleteCloudBackup() = runCloud { it.deleteBackup() }
+    fun backupLibrary() = runCloud { repo ->
+        val res = repo.backup()
+        loadSnapshots()
+        res
+    }
+    fun restoreLibrary(snapshotId: String? = null) = runCloud { repo ->
+        val res = repo.restore(snapshotId)
+        loadSnapshots()
+        res
+    }
+    fun deleteCloudBackup(snapshotId: String? = null) = runCloud { repo ->
+        val res = repo.deleteBackup(snapshotId)
+        loadSnapshots()
+        res
+    }
+
+    fun loadSnapshots() {
+        val repository = cloudBackup ?: return
+        viewModelScope.launch {
+            val result = repository.listBackups()
+            result.onSuccess { list ->
+                _snapshots.value = list
+            }
+        }
+    }
+
     private fun runCloud(action: suspend (CloudBackupRepository) -> Result<String>) {
         if (cloudBusy.value) return
         val repository = cloudBackup ?: return
@@ -86,8 +112,10 @@ class SettingsViewModel(
             authRepository.authState.collect { state ->
                 if (state is AuthState.Authenticated) {
                     syncWithBackendAfterAuth(state.user)
+                    loadSnapshots()
                 } else {
                     _userProfile.value = null
+                    _snapshots.value = emptyList()
                 }
             }
         }

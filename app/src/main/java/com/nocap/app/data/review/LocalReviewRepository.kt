@@ -1,16 +1,19 @@
 package com.nocap.app.data.review
 
+import com.nocap.app.core.database.dao.HighlightDao
 import com.nocap.app.core.database.dao.ReviewDao
 import com.nocap.app.core.database.dao.ReviewItemWithDetails
 import com.nocap.app.core.database.entity.ReviewItemEntity
 import com.nocap.app.domain.repository.ReviewRepository
+import com.nocap.app.domain.repository.ReviewStatsSummary
 import com.nocap.app.domain.review.ReviewRating
 import com.nocap.app.domain.review.ReviewScheduler
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
 
 class LocalReviewRepository(
-    private val reviewDao: ReviewDao
+    private val reviewDao: ReviewDao,
+    private val highlightDao: HighlightDao? = null
 ) : ReviewRepository {
 
     override fun observeDueItems(cutoffTime: Long): Flow<List<ReviewItemEntity>> {
@@ -22,7 +25,10 @@ class LocalReviewRepository(
     }
 
     override suspend fun getDueItemsWithDetails(cutoffTime: Long): List<ReviewItemWithDetails> {
-        return reviewDao.getDueItemsWithDetails(cutoffTime)
+        val items = reviewDao.getDueItemsWithDetails(cutoffTime)
+        val now = System.currentTimeMillis()
+        // Priority ordering: items often forgotten or overdue are prioritized first
+        return items.sortedByDescending { ReviewScheduler.priorityScore(it.reviewItem, now) }
     }
 
     override fun observeDueItemsCount(cutoffTime: Long): Flow<Int> {
@@ -102,5 +108,43 @@ class LocalReviewRepository(
 
     override fun observeAllReviewItems(): Flow<List<ReviewItemEntity>> {
         return reviewDao.observeAllReviewItems()
+    }
+
+    override suspend fun getReviewStats(now: Long): ReviewStatsSummary {
+        val due = reviewDao.getDueCount(now)
+        val learning = reviewDao.getLearningCount(now)
+        val mastered = reviewDao.getMasteredCount(now)
+        return ReviewStatsSummary(
+            dueCount = due,
+            learningCount = learning,
+            masteredCount = mastered,
+            totalCount = due + learning + mastered
+        )
+    }
+
+    override suspend fun autoGenerateReviewItems(bookId: String?, onlyWithNotes: Boolean): Result<Int> {
+        return try {
+            val dao = highlightDao ?: return Result.failure(IllegalStateException("HighlightDao not provided"))
+            val existingIds = reviewDao.getAllReviewAnnotationIds().toSet()
+            val allHighlights = if (bookId != null) dao.getHighlightsForBook(bookId) else dao.getAllHighlights()
+            val candidates = allHighlights.filter { hl ->
+                !existingIds.contains(hl.id) && (!onlyWithNotes || !hl.note.isNullOrBlank())
+            }
+            val now = System.currentTimeMillis()
+            val newItems = candidates.map { hl ->
+                ReviewScheduler.createInitialReviewItem(
+                    id = UUID.randomUUID().toString(),
+                    annotationId = hl.id,
+                    bookId = hl.bookId,
+                    now = now
+                )
+            }
+            if (newItems.isNotEmpty()) {
+                reviewDao.insertReviewItems(newItems)
+            }
+            Result.success(newItems.size)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 }

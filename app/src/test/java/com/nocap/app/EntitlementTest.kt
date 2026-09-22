@@ -16,9 +16,22 @@ class EntitlementTest {
         assertTrue(EntitlementPolicy.allows(Feature.MULTI_DEVICE_SYNC,Entitlement("a"),"a",now))
     }
 
-    @Test fun `Free and expired plans keep all current features available including sync and cloud`(){
-        for(feature in Feature.entries) for(state in listOf(null,Entitlement("a"),pro().copy(status="EXPIRED",expiresAt=now-1)))
+    @Test fun `Free and expired plans keep all base features available including sync and cloud`(){
+        val baseFeatures = Feature.entries.filter { it !in setOf(Feature.ADVANCED_READING_MEMORY, Feature.KNOWLEDGE_EXPORT, Feature.ADVANCED_CLOUD) }
+        for(feature in baseFeatures) for(state in listOf(null,Entitlement("a"),pro().copy(status="EXPIRED",expiresAt=now-1)))
             assertTrue(feature.name,EntitlementPolicy.allows(feature,state,"a",now))
+    }
+
+    @Test fun `New Pro features require active Pro entitlement`(){
+        val proFeatures = listOf(Feature.ADVANCED_READING_MEMORY, Feature.KNOWLEDGE_EXPORT, Feature.ADVANCED_CLOUD)
+        for(feature in proFeatures) {
+            // Free or expired -> false
+            for(state in listOf(null, Entitlement("a"), pro().copy(status="EXPIRED", expiresAt=now-1))) {
+                assertFalse(feature.name, EntitlementPolicy.allows(feature, state, "a", now))
+            }
+            // Active Pro -> true
+            assertTrue(feature.name, EntitlementPolicy.allows(feature, pro(), "a", now))
+        }
     }
 
     @Test fun `pending cancellation and already owned purchase outcomes`(){

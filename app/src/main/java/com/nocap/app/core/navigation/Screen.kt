@@ -29,7 +29,9 @@ sealed class Screen(val route: String, val title: String? = null, val icon: Imag
             }
         }
     }
-    data object ReviewQueue : Screen("review_queue")
+    data object ReviewQueue : Screen("review_queue?mode={mode}") {
+        fun createRoute(mode: String? = null) = if (mode != null) "review_queue?mode=$mode" else "review_queue"
+    }
     data object KnowledgeSearch : Screen("knowledge_search")
     data object GlobalAnnotations : Screen("global_annotations")
     data object ReadingStats : Screen("reading_stats")

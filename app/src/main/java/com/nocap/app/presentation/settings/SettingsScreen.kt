@@ -33,6 +33,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
@@ -43,9 +44,11 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -98,20 +101,61 @@ fun SettingsScreen(
     val authUiState by viewModel.authUiState.collectAsStateWithLifecycle()
     val cloudBusy by viewModel.cloudBusy.collectAsStateWithLifecycle()
     val cloudMessage by viewModel.cloudMessage.collectAsStateWithLifecycle()
+    val snapshots by viewModel.snapshots.collectAsStateWithLifecycle()
     var cloudAction by remember { mutableStateOf<String?>(null) }
+    var selectedSnapshotToRestore by remember { mutableStateOf<com.nocap.app.data.cloud.CloudBackupSnapshot?>(null) }
+    var selectedSnapshotToDelete by remember { mutableStateOf<com.nocap.app.data.cloud.CloudBackupSnapshot?>(null) }
     val selectedLanguage = remember(context) { AppLanguageManager.selected(context) }
 
     if (cloudAction != null) {
         AlertDialog(onDismissRequest = { cloudAction = null },
             title = { Text(if (cloudAction == "restore") "Khôi phục thư viện?" else if (cloudAction == "delete") "Xóa bản sao lưu?" else "Sao lưu thư viện?") },
             text = { Text(if (cloudAction == "restore") "Thư viện hiện tại sẽ được thay bằng bản sao lưu trên tài khoản này. Hãy sao lưu dữ liệu cần giữ trước khi tiếp tục."
-                else if (cloudAction == "delete") "Bản sao lưu trên đám mây sẽ bị xóa. Dữ liệu trong máy vẫn được giữ."
-                else "Sách, ghi chú, tiến độ và bộ sưu tập trên máy sẽ được tải lên tài khoản đang đăng nhập. Bản sao lưu gần nhất sẽ được thay thế.") },
+                else if (cloudAction == "delete") "Toàn bộ bản sao lưu trên đám mây sẽ bị xóa. Dữ liệu trong máy vẫn được giữ."
+                else "Sách, ghi chú, tiến độ và bộ sưu tập trên máy sẽ được tải lên tài khoản đang đăng nhập.") },
             confirmButton = { TextButton(onClick = {
                 when (cloudAction) { "restore" -> viewModel.restoreLibrary(); "delete" -> viewModel.deleteCloudBackup(); else -> viewModel.backupLibrary() }
                 cloudAction = null
             }) { Text("Tiếp tục") } },
             dismissButton = { TextButton(onClick = { cloudAction = null }) { Text("Hủy") } })
+    }
+
+    selectedSnapshotToRestore?.let { snap ->
+        AlertDialog(
+            onDismissRequest = { selectedSnapshotToRestore = null },
+            title = { Text("Khôi phục tại thời điểm này?") },
+            text = {
+                Text("Dữ liệu hiện tại sẽ được thay thế bằng bản sao lưu lúc ${snap.updatedAt ?: snap.id} (${snap.size / 1024 / 1024} MB). Thao tác này sẽ ghi đè thư viện hiện tại.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.restoreLibrary(snap.id)
+                    selectedSnapshotToRestore = null
+                }) { Text("Khôi phục") }
+            },
+            dismissButton = {
+                TextButton(onClick = { selectedSnapshotToRestore = null }) { Text("Hủy") }
+            }
+        )
+    }
+
+    selectedSnapshotToDelete?.let { snap ->
+        AlertDialog(
+            onDismissRequest = { selectedSnapshotToDelete = null },
+            title = { Text("Xóa bản sao lưu?") },
+            text = {
+                Text("Bản sao lưu lúc ${snap.updatedAt ?: snap.id} (${snap.size / 1024 / 1024} MB) sẽ bị xóa vĩnh viễn khỏi đám mây.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteCloudBackup(snap.id)
+                    selectedSnapshotToDelete = null
+                }) { Text("Xóa", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { selectedSnapshotToDelete = null }) { Text("Hủy") }
+            }
+        )
     }
 
     val showLogin by viewModel.showLoginDialog.collectAsStateWithLifecycle()
@@ -604,7 +648,7 @@ fun SettingsScreen(
                                     shape = RoundedCornerShape(10.dp),
                                     modifier = Modifier.weight(1f).heightIn(min = 48.dp)
                                 ) {
-                                    Text("Sao lưu")
+                                    Text("Sao lưu ngay")
                                 }
                                 OutlinedButton(
                                     enabled = !cloudBusy,
@@ -612,7 +656,98 @@ fun SettingsScreen(
                                     shape = RoundedCornerShape(10.dp),
                                     modifier = Modifier.weight(1f).heightIn(min = 48.dp)
                                 ) {
-                                    Text("Khôi phục")
+                                    Text("Khôi phục gần nhất")
+                                }
+                            }
+
+                            if (snapshots.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Lịch sử sao lưu (${snapshots.size})",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Text(
+                                        text = "Khôi phục theo thời điểm",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                }
+
+                                snapshots.forEach { snap ->
+                                    Card(
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .padding(10.dp)
+                                                .fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                val formattedTime = remember(snap.updatedAt) {
+                                                    snap.updatedAt?.let {
+                                                        runCatching {
+                                                            val parser = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US).apply {
+                                                                timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                                            }
+                                                            val parsed = parser.parse(it.take(19))
+                                                            java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()).format(parsed!!)
+                                                        }.getOrDefault(it)
+                                                    } ?: "Bản sao lưu ${snap.id}"
+                                                }
+                                                Text(
+                                                    text = formattedTime,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    fontWeight = FontWeight.SemiBold
+                                                )
+                                                val sizeMb = (snap.size.toDouble() / (1024 * 1024)).let {
+                                                    if (it < 0.1) String.format(java.util.Locale.US, "%.1f KB", snap.size.toDouble() / 1024)
+                                                    else String.format(java.util.Locale.US, "%.1f MB", it)
+                                                }
+                                                Text(
+                                                    text = "$sizeMb • ${snap.deviceName ?: "Thiết bị"}",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                            Row(
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                FilledTonalButton(
+                                                    onClick = { selectedSnapshotToRestore = snap },
+                                                    enabled = !cloudBusy,
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                                    modifier = Modifier.heightIn(min = 36.dp)
+                                                ) {
+                                                    Text("Khôi phục", fontSize = 11.sp)
+                                                }
+                                                IconButton(
+                                                    onClick = { selectedSnapshotToDelete = snap },
+                                                    enabled = !cloudBusy,
+                                                    modifier = Modifier.size(36.dp)
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.Delete,
+                                                        contentDescription = "Xóa",
+                                                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
 
@@ -622,7 +757,7 @@ fun SettingsScreen(
                                 modifier = Modifier.align(Alignment.CenterHorizontally)
                             ) {
                                 Text(
-                                    text = "Xóa bản sao lưu trên đám mây",
+                                    text = "Xóa toàn bộ bản sao lưu trên đám mây",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )

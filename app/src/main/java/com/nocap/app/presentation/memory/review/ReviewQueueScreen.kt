@@ -36,19 +36,45 @@ import com.nocap.app.domain.review.ReviewRating
 fun ReviewQueueScreen(
     onBackClick: () -> Unit,
     onOpenSource: (bookId: String, locatorJson: String?) -> Unit,
+    initialMode: SessionMode = SessionMode.STANDARD,
     viewModel: ReviewQueueViewModel = viewModel(
         factory = ReviewQueueViewModel.provideFactory(LocalContext.current)
     )
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
+    androidx.compose.runtime.LaunchedEffect(initialMode) {
+        if (initialMode != SessionMode.STANDARD) {
+            viewModel.loadDueItems(initialMode)
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Ôn tập ngắt quãng") },
+                title = { Text(uiState.sessionMode.title) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = localize("Quay lại"))
+                    }
+                },
+                actions = {
+                    uiState.remainingSeconds?.let { sec ->
+                        val mins = sec / 60
+                        val secs = sec % 60
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (sec <= 60) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer,
+                            modifier = Modifier.padding(end = 12.dp)
+                        ) {
+                            Text(
+                                text = String.format(java.util.Locale.US, "%02d:%02d", mins, secs),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = if (sec <= 60) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
                     }
                 }
             )
@@ -90,16 +116,51 @@ fun ReviewQueueScreen(
                         )
                     }
                     Text(
-                        text = "Xuất sắc!",
+                        text = if (uiState.completedCount > 0) "Hoàn thành phiên ôn tập!" else "Không có thẻ nào",
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Bạn đã hoàn thành tất cả các thẻ cần ôn tập hôm nay.",
+                        text = if (uiState.completedCount > 0)
+                            "Bạn đã ôn luyện xong ${uiState.completedCount} thẻ trong phiên này."
+                        else "Bạn đã hoàn thành tất cả các thẻ cần ôn tập hôm nay.",
                         style = MaterialTheme.typography.bodyLarge,
                         textAlign = TextAlign.Center,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+
+                    if (uiState.completedCount > 0) {
+                        Card(
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceEvenly
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("Chưa nhớ", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                                    Text("${uiState.againCount}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+                                }
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("Khó", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
+                                    Text("${uiState.hardCount}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.tertiary)
+                                }
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("Tốt", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                    Text("${uiState.goodCount}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                }
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("Dễ", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                                    Text("${uiState.easyCount}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
+                                }
+                            }
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(8.dp))
                     Button(onClick = onBackClick) {
                         Text("Quay lại Bộ nhớ đọc")
@@ -211,7 +272,7 @@ fun ReviewQueueScreen(
                                         )
                                         Spacer(modifier = Modifier.height(4.dp))
                                         Text(
-                                            text = highlight.note ?: "",
+                                            text = highlight.note,
                                             style = MaterialTheme.typography.bodyMedium
                                         )
                                     }
@@ -252,6 +313,7 @@ fun ReviewQueueScreen(
                     ) {
                         Button(
                             onClick = { viewModel.answerCurrent(ReviewRating.AGAIN) },
+                            enabled = !uiState.isSubmitting,
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE57373))
                         ) {
@@ -260,6 +322,7 @@ fun ReviewQueueScreen(
 
                         Button(
                             onClick = { viewModel.answerCurrent(ReviewRating.HARD) },
+                            enabled = !uiState.isSubmitting,
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFB74D))
                         ) {
@@ -268,6 +331,7 @@ fun ReviewQueueScreen(
 
                         Button(
                             onClick = { viewModel.answerCurrent(ReviewRating.GOOD) },
+                            enabled = !uiState.isSubmitting,
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF64B5F6))
                         ) {
@@ -276,6 +340,7 @@ fun ReviewQueueScreen(
 
                         Button(
                             onClick = { viewModel.answerCurrent(ReviewRating.EASY) },
+                            enabled = !uiState.isSubmitting,
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF81C784))
                         ) {

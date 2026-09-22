@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.nocap.app.core.database.AppDatabase
 import com.nocap.app.core.database.entity.CustomFontEntity
 import com.nocap.app.core.database.entity.HighlightEntity
+import com.nocap.app.core.database.entity.HighlightNoteVersionEntity
 import com.nocap.app.core.database.entity.PerBookPreferencesEntity
 import com.nocap.app.core.datastore.ReaderFontFamily
 import com.nocap.app.core.datastore.ReaderOrientation
@@ -630,6 +631,17 @@ class ReaderViewModel(
         }
     }
 
+    suspend fun getNoteVersions(highlightId: String): List<HighlightNoteVersionEntity> {
+        return annotationRepository.getNoteVersions(highlightId)
+    }
+
+    fun restoreNoteVersion(highlightId: String, versionId: String, onComplete: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            val result = annotationRepository.restoreNoteVersion(highlightId, versionId)
+            onComplete(result.isSuccess)
+        }
+    }
+
     fun deleteHighlight(id: String) {
         viewModelScope.launch {
             annotationRepository.deleteHighlight(id)
@@ -809,10 +821,10 @@ class ReaderViewModel(
                 val bookmarkRepo = LocalBookmarkRepository(db.bookmarkDao(), db.catalogDao(), catalogRepo)
                 val prefStore = ReaderPreferencesDataStore(context.applicationContext)
                 val publicationManager = ReadiumPublicationManager(context.applicationContext)
-                val annotationRepo = LocalAnnotationRepository(db.highlightDao())
+                val annotationRepo = LocalAnnotationRepository(db.highlightDao(), db.highlightNoteVersionDao())
                 val perBookRepo = LocalPerBookPreferencesRepository(db.perBookPreferencesDao())
                 val customFontRepo = LocalCustomFontRepository(context.applicationContext, db.customFontDao())
-                val reviewRepo = LocalReviewRepository(db.reviewDao())
+                val reviewRepo = LocalReviewRepository(db.reviewDao(), db.highlightDao())
                 val sessionManager = ReadingSessionManager.getInstance(context.applicationContext)
 
                 return ReaderViewModel(

@@ -35,6 +35,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -55,6 +56,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
@@ -66,6 +68,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -896,6 +899,76 @@ fun ReaderScreen(
     selectedHighlightForEdit?.let { h ->
         var noteText by remember { mutableStateOf(h.note ?: "") }
         var currentColor by remember { mutableStateOf(h.color) }
+        var showVersionHistory by remember { mutableStateOf(false) }
+        var versions by remember { mutableStateOf<List<com.nocap.app.core.database.entity.HighlightNoteVersionEntity>>(emptyList()) }
+        val editScope = rememberCoroutineScope()
+
+        if (showVersionHistory) {
+            AlertDialog(
+                onDismissRequest = { showVersionHistory = false },
+                title = { Text("Lịch sử phiên bản ghi chú") },
+                text = {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (versions.isEmpty()) {
+                            Text(
+                                text = "Chưa có phiên bản cũ nào được ghi lại.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            versions.forEach { ver ->
+                                Card(
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Text(
+                                            text = ver.noteText,
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            val timeStr = remember(ver.createdAt) {
+                                                java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date(ver.createdAt))
+                                            }
+                                            Text(
+                                                text = timeStr,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.outline
+                                            )
+                                            FilledTonalButton(
+                                                onClick = {
+                                                    noteText = ver.noteText
+                                                    showVersionHistory = false
+                                                },
+                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                                shape = RoundedCornerShape(6.dp)
+                                            ) {
+                                                Text("Khôi phục", fontSize = 11.sp)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showVersionHistory = false }) {
+                        Text("Đóng")
+                    }
+                }
+            )
+        }
 
         AlertDialog(
             onDismissRequest = { selectedHighlightForEdit = null },
@@ -913,6 +986,26 @@ fun ReaderScreen(
                         currentColor = it
                         viewModel.updateHighlightColor(h.id, it)
                     })
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Ghi chú", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                        TextButton(
+                            onClick = {
+                                editScope.launch {
+                                    versions = viewModel.getNoteVersions(h.id)
+                                    showVersionHistory = true
+                                }
+                            },
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Lịch sử phiên bản", fontSize = 11.sp)
+                        }
+                    }
                     TextField(
                         value = noteText,
                         onValueChange = { noteText = it },

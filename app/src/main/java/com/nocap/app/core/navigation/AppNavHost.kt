@@ -170,8 +170,8 @@ fun AppNavHost(
                         onNavigateToReader = { bookId, locatorJson ->
                             navController.navigate(Screen.Reader.createRoute(bookId, locatorJson))
                         },
-                        onNavigateToReviewQueue = {
-                            navController.navigate(Screen.ReviewQueue.route)
+                        onNavigateToReviewQueue = { mode ->
+                            navController.navigate(Screen.ReviewQueue.createRoute(mode))
                         },
                         onNavigateToSearch = {
                             navController.navigate(Screen.KnowledgeSearch.route)
@@ -184,12 +184,28 @@ fun AppNavHost(
                         }
                     )
                 }
-                composable(Screen.ReviewQueue.route) {
+                composable(
+                    route = Screen.ReviewQueue.route,
+                    arguments = listOf(
+                        navArgument("mode") {
+                            type = NavType.StringType
+                            nullable = true
+                            defaultValue = null
+                        }
+                    )
+                ) { backStackEntry ->
+                    val modeStr = backStackEntry.arguments?.getString("mode")
+                    val mode = when (modeStr) {
+                        "QUICK_5" -> com.nocap.app.presentation.memory.review.SessionMode.QUICK_5
+                        "QUICK_10" -> com.nocap.app.presentation.memory.review.SessionMode.QUICK_10
+                        else -> com.nocap.app.presentation.memory.review.SessionMode.STANDARD
+                    }
                     ReviewQueueScreen(
                         onBackClick = { navController.popBackStack() },
                         onOpenSource = { bookId, locatorJson ->
                             navController.navigate(Screen.Reader.createRoute(bookId, locatorJson))
-                        }
+                        },
+                        initialMode = mode
                     )
                 }
                 composable(Screen.KnowledgeSearch.route) {

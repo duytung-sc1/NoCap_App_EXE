@@ -113,7 +113,8 @@ fun PlanCard() {
             }
 
             Text(
-                text = "Gói Miễn phí hiện đã bao gồm toàn bộ tính năng đồng bộ và lưu trữ đám mây. Gói Pro đang được chuẩn bị với các tính năng mới sắp ra mắt.",
+                text = if (pro) "Bạn đang sử dụng gói Pro: Đã mở khóa Bộ nhớ đọc nâng cao, Xuất PDF/Anki và Cloud nâng cao."
+                else "Gói Pro mở khóa: Bộ nhớ đọc nâng cao (Spaced Repetition & phiên ôn nhanh), Xuất tài liệu PDF & bộ thẻ Anki, và Cloud nâng cao (Lịch sử ghi chú, khôi phục theo thời điểm, 10 bản sao lưu).",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

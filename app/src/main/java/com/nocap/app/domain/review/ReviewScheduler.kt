@@ -9,9 +9,37 @@ enum class ReviewRating {
     EASY   // Dễ
 }
 
+enum class MemoryState {
+    DUE,       // Cần ôn lại
+    LEARNING,  // Đang học
+    MASTERED   // Đã nhớ
+}
+
 object ReviewScheduler {
 
     const val ONE_DAY_MS: Long = 24L * 60 * 60 * 1000 // 86,400,000 ms
+
+    /**
+     * Determines the memory status of an item: DUE, LEARNING, or MASTERED.
+     */
+    fun memoryState(item: ReviewItemEntity, now: Long = System.currentTimeMillis()): MemoryState {
+        return when {
+            item.nextReviewAt <= now -> MemoryState.DUE
+            item.intervalDays >= 21 -> MemoryState.MASTERED
+            else -> MemoryState.LEARNING
+        }
+    }
+
+    /**
+     * Calculates a priority score for queue ordering:
+     * Higher score = higher priority in review queue (items often forgotten or overdue).
+     */
+    fun priorityScore(item: ReviewItemEntity, now: Long = System.currentTimeMillis()): Float {
+        val overdueDays = maxOf(0f, (now - item.nextReviewAt).toFloat() / ONE_DAY_MS)
+        val difficultyWeight = (3.0f - item.easeFactor).coerceAtLeast(0.1f)
+        val forgottenBonus = if (item.reviewCount > 0 && item.intervalDays <= 1) 5.0f else 0f
+        return overdueDays * 2.5f + difficultyWeight * 3.0f + forgottenBonus
+    }
 
     /**
      * Calculates the next review state given the current item and the user's rating.
@@ -47,10 +75,11 @@ object ReviewScheduler {
                     1 -> 5
                     else -> maxOf(5, (item.intervalDays * (newEaseFactor + 0.5f)).toInt())
                 }
-                newEaseFactor += 0.15f
+                newEaseFactor = minOf(3.5f, newEaseFactor + 0.15f)
             }
         }
 
+        newInterval = newInterval.coerceIn(1, 36500)
         val nextReviewAt = now + (newInterval.toLong() * ONE_DAY_MS)
 
         return item.copy(

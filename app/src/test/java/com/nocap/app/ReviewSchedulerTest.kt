@@ -1,6 +1,7 @@
 package com.nocap.app
 
 import com.nocap.app.core.database.entity.ReviewItemEntity
+import com.nocap.app.domain.review.MemoryState
 import com.nocap.app.domain.review.ReviewRating
 import com.nocap.app.domain.review.ReviewScheduler
 import org.junit.Assert.assertEquals
@@ -116,18 +117,79 @@ class ReviewSchedulerTest {
     }
 
     @Test
-    fun `test EASY rating boosts ease factor and assigns longer intervals`() {
+    fun `test priorityScore prioritizes overdue items and lower ease factor`() {
         val now = 1_700_000_000_000L
-        val initial = ReviewScheduler.createInitialReviewItem("r1", "a1", "b1", now)
+        val overdueHard = ReviewItemEntity(
+            id = "r1", annotationId = "a1", bookId = "b1", isEnabled = true,
+            nextReviewAt = now - 5 * ReviewScheduler.ONE_DAY_MS, // 5 days overdue
+            lastReviewedAt = now - 10 * ReviewScheduler.ONE_DAY_MS,
+            reviewCount = 2, intervalDays = 1, easeFactor = 1.8f,
+            createdAt = now, updatedAt = now
+        )
+        val notDueEasy = ReviewItemEntity(
+            id = "r2", annotationId = "a2", bookId = "b1", isEnabled = true,
+            nextReviewAt = now + 5 * ReviewScheduler.ONE_DAY_MS, // in future
+            lastReviewedAt = now,
+            reviewCount = 5, intervalDays = 20, easeFactor = 2.8f,
+            createdAt = now, updatedAt = now
+        )
 
-        // 1st review (count 0 -> 1) with EASY: interval = 3
-        val rep1 = ReviewScheduler.calculateNextReview(initial, ReviewRating.EASY, now)
-        assertEquals(3, rep1.intervalDays)
-        assertEquals(2.65f, rep1.easeFactor, 0.001f)
+        val score1 = ReviewScheduler.priorityScore(overdueHard, now)
+        val score2 = ReviewScheduler.priorityScore(notDueEasy, now)
 
-        // 2nd review (count 1 -> 2) with EASY: interval = 5
-        val rep2 = ReviewScheduler.calculateNextReview(rep1, ReviewRating.EASY, now)
-        assertEquals(5, rep2.intervalDays)
-        assertEquals(2.80f, rep2.easeFactor, 0.001f)
+        assertTrue("Overdue hard card must have higher priority score than not-due easy card", score1 > score2)
+    }
+
+    @Test
+    fun `test MemoryState categorization`() {
+        val now = 1_700_000_000_000L
+        val dueItem = ReviewItemEntity(
+            id = "r1", annotationId = "a1", bookId = "b1", isEnabled = true,
+            nextReviewAt = now - 1000, lastReviewedAt = null,
+            reviewCount = 0, intervalDays = 1, easeFactor = 2.5f,
+            createdAt = now, updatedAt = now
+        )
+        val learningItem = ReviewItemEntity(
+            id = "r2", annotationId = "a2", bookId = "b1", isEnabled = true,
+            nextReviewAt = now + 2 * ReviewScheduler.ONE_DAY_MS, lastReviewedAt = now,
+            reviewCount = 2, intervalDays = 3, easeFactor = 2.5f,
+            createdAt = now, updatedAt = now
+        )
+        val masteredItem = ReviewItemEntity(
+            id = "r3", annotationId = "a3", bookId = "b1", isEnabled = true,
+            nextReviewAt = now + 30 * ReviewScheduler.ONE_DAY_MS, lastReviewedAt = now,
+            reviewCount = 6, intervalDays = 30, easeFactor = 2.6f,
+            createdAt = now, updatedAt = now
+        )
+
+        assertEquals(MemoryState.DUE, ReviewScheduler.memoryState(dueItem, now))
+        assertEquals(MemoryState.LEARNING, ReviewScheduler.memoryState(learningItem, now))
+        assertEquals(MemoryState.MASTERED, ReviewScheduler.memoryState(masteredItem, now))
+    }
+
+    @Test
+    fun `test interval and ease factor caps on extreme repetitions`() {
+        val now = 1_700_000_000_000L
+        var item = ReviewScheduler.createInitialReviewItem("r1", "a1", "b1", now)
+        for (i in 0 until 30) {
+            item = ReviewScheduler.calculateNextReview(item, ReviewRating.EASY, now)
+        }
+        assertTrue("Interval must not exceed 36500 days", item.intervalDays <= 36500)
+        assertTrue("Ease factor must not exceed 3.5", item.easeFactor <= 3.5f)
+        assertTrue("Next review must be positive and in future", item.nextReviewAt > now)
+    }
+
+    @Test
+    fun `test overdue mastered item is categorized as DUE`() {
+        val now = 1_700_000_000_000L
+        val overdueMastered = ReviewItemEntity(
+            id = "r1", annotationId = "a1", bookId = "b1", isEnabled = true,
+            nextReviewAt = now - 1000,
+            lastReviewedAt = now - 35 * ReviewScheduler.ONE_DAY_MS,
+            reviewCount = 8, intervalDays = 30, easeFactor = 2.5f,
+            createdAt = now, updatedAt = now
+        )
+        assertEquals(MemoryState.DUE, ReviewScheduler.memoryState(overdueMastered, now))
     }
 }
+

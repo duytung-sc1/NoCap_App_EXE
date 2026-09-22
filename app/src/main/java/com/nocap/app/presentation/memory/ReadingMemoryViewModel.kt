@@ -8,10 +8,14 @@ import com.nocap.app.core.database.AppDatabase
 import com.nocap.app.core.database.dao.BookmarkDao
 import com.nocap.app.core.database.dao.CatalogDao
 import com.nocap.app.core.database.dao.HighlightDao
+import com.nocap.app.core.database.entity.BookmarkEntity
+import com.nocap.app.core.database.entity.CatalogBookEntity
+import com.nocap.app.core.database.entity.HighlightEntity
 import com.nocap.app.data.review.LocalReviewRepository
 import com.nocap.app.data.search.LocalKnowledgeSearchRepository
 import com.nocap.app.data.stats.LocalReadingStatsRepository
 import com.nocap.app.domain.export.KnowledgeExporter
+import com.nocap.app.domain.export.PdfKnowledgeExporter
 import com.nocap.app.domain.model.BookmarkWithBook
 import com.nocap.app.domain.model.HighlightWithBook
 import com.nocap.app.domain.repository.KnowledgeSearchRepository
@@ -19,6 +23,7 @@ import com.nocap.app.domain.repository.MostReadBookItem
 import com.nocap.app.domain.repository.ReadingStatsRepository
 import com.nocap.app.domain.repository.ReadingStatsSummary
 import com.nocap.app.domain.repository.ReviewRepository
+import com.nocap.app.domain.repository.ReviewStatsSummary
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -32,10 +37,12 @@ data class ReadingMemoryUiState(
     val isLoading: Boolean = true,
     val statsSummary: ReadingStatsSummary = ReadingStatsSummary(0, 0, 0, 0, 0),
     val dueTodayCount: Int = 0,
+    val reviewStats: ReviewStatsSummary = ReviewStatsSummary(0, 0, 0, 0),
     val recentHighlights: List<HighlightWithBook> = emptyList(),
     val recentNotes: List<HighlightWithBook> = emptyList(),
     val recentBookmarks: List<BookmarkWithBook> = emptyList(),
-    val mostReadBooks: List<MostReadBookItem> = emptyList()
+    val mostReadBooks: List<MostReadBookItem> = emptyList(),
+    val allBooks: List<CatalogBookEntity> = emptyList()
 )
 
 class ReadingMemoryViewModel(
@@ -64,13 +71,17 @@ class ReadingMemoryViewModel(
             val dueCount = withContext(Dispatchers.IO) {
                 reviewRepository.getDueItemsCount(now)
             }
+            val revStats = withContext(Dispatchers.IO) {
+                reviewRepository.getReviewStats(now)
+            }
             val mostRead = withContext(Dispatchers.IO) {
                 statsRepository.getMostReadBooks(5)
             }
 
-            val books = withContext(Dispatchers.IO) {
-                catalogDao.getAllBooks().associateBy { it.id }
+            val allCatalogBooks = withContext(Dispatchers.IO) {
+                catalogDao.getAllBooks()
             }
+            val books = allCatalogBooks.associateBy { it.id }
 
             val allHighlights = withContext(Dispatchers.IO) {
                 highlightDao.getAllHighlights()
@@ -128,13 +139,25 @@ class ReadingMemoryViewModel(
                     isLoading = false,
                     statsSummary = stats,
                     dueTodayCount = dueCount,
+                    reviewStats = revStats,
                     recentHighlights = recentHls,
                     recentNotes = recentNotes,
                     recentBookmarks = recentBms,
-                    mostReadBooks = mostRead
+                    mostReadBooks = mostRead,
+                    allBooks = allCatalogBooks
                 )
             }
         }
+    }
+
+    suspend fun autoGenerateReview(onlyWithNotes: Boolean = false): Result<Int> {
+        val result = withContext(Dispatchers.IO) {
+            reviewRepository.autoGenerateReviewItems(null, onlyWithNotes)
+        }
+        if (result.isSuccess) {
+            loadData()
+        }
+        return result
     }
 
     fun toggleReview(annotationId: String, bookId: String, currentInReview: Boolean) {
@@ -150,31 +173,94 @@ class ReadingMemoryViewModel(
         }
     }
 
-    suspend fun exportAllKnowledge(outputStream: OutputStream): Boolean {
-        return withContext(Dispatchers.IO) {
-            try {
-                val books = catalogDao.getAllBooks()
-                val allHighlights = highlightDao.getAllHighlights()
-                val allBookmarks = bookmarkDao.getAllBookmarks()
-
-                val hlMap = allHighlights.groupBy { it.bookId }
-                val bmMap = allBookmarks.groupBy { it.bookId }
-
-                val booksWithData = books.mapNotNull { book ->
-                    val hls = hlMap[book.id].orEmpty()
-                    val bms = bmMap[book.id].orEmpty()
-                    if (hls.isNotEmpty() || bms.isNotEmpty()) {
-                        Triple(book, hls, bms)
-                    } else null
-                }
-
-                val markdown = KnowledgeExporter.formatAllKnowledge(booksWithData)
-                KnowledgeExporter.writeMarkdownToStream(outputStream, markdown)
-                true
-            } catch (e: Exception) {
-                false
-            }
+    private suspend fun getExportData(
+        bookId: String? = null,
+        topicColor: String? = null
+    ): List<Triple<CatalogBookEntity, List<HighlightEntity>, List<BookmarkEntity>>> = withContext(Dispatchers.IO) {
+        val allBooks = catalogDao.getAllBooks()
+        val targetBooks = if (!bookId.isNullOrBlank()) allBooks.filter { it.id == bookId } else allBooks
+        val allHighlights = highlightDao.getAllHighlights()
+        val filteredHighlights = if (!topicColor.isNullOrBlank() && topicColor != "ALL") {
+            allHighlights.filter { it.color.equals(topicColor, ignoreCase = true) }
+        } else {
+            allHighlights
         }
+        val allBookmarks = bookmarkDao.getAllBookmarks()
+
+        val hlMap = filteredHighlights.groupBy { it.bookId }
+        val bmMap = allBookmarks.groupBy { it.bookId }
+
+        targetBooks.mapNotNull { book ->
+            val hls = hlMap[book.id].orEmpty()
+            val bms = bmMap[book.id].orEmpty()
+            if (hls.isNotEmpty() || bms.isNotEmpty()) {
+                Triple(book, hls, bms)
+            } else null
+        }
+    }
+
+    suspend fun exportMarkdown(
+        outputStream: OutputStream,
+        bookId: String? = null,
+        topicColor: String? = null
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val booksWithData = getExportData(bookId, topicColor)
+            val markdown = if (!topicColor.isNullOrBlank() && topicColor != "ALL") {
+                KnowledgeExporter.formatTopicKnowledge(topicColor, booksWithData)
+            } else {
+                KnowledgeExporter.formatAllKnowledge(booksWithData)
+            }
+            KnowledgeExporter.writeMarkdownToStream(outputStream, markdown)
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    suspend fun exportPdf(
+        outputStream: OutputStream,
+        bookId: String? = null,
+        topicColor: String? = null
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val booksWithData = getExportData(bookId, topicColor)
+            val titleOverride = if (!topicColor.isNullOrBlank() && topicColor != "ALL") {
+                "NoCap — Tổng hợp theo màu: $topicColor"
+            } else if (!bookId.isNullOrBlank()) {
+                val book = booksWithData.firstOrNull()?.first
+                "NoCap — ${book?.userTitleOverride ?: book?.title ?: "Tài liệu"}"
+            } else null
+
+            PdfKnowledgeExporter.exportToPdf(booksWithData, outputStream, titleOverride)
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    suspend fun exportAnki(
+        outputStream: OutputStream,
+        bookId: String? = null,
+        topicColor: String? = null
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val booksWithData = getExportData(bookId, topicColor)
+            val highlightsWithBook = booksWithData.flatMap { (book, hls, _) ->
+                hls.map { hl ->
+                    HighlightWithBook(highlight = hl, book = book)
+                }
+            }
+            val tsv = KnowledgeExporter.formatAnkiCards(highlightsWithBook)
+            KnowledgeExporter.writeStringToStream(outputStream, tsv)
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    suspend fun exportAllKnowledge(outputStream: OutputStream): Boolean {
+        return exportMarkdown(outputStream)
     }
 
     companion object {
@@ -183,7 +269,7 @@ class ReadingMemoryViewModel(
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 val db = AppDatabase.getInstance(context)
                 val statsRepo = LocalReadingStatsRepository(db.readingSessionDao(), db.catalogDao())
-                val reviewRepo = LocalReviewRepository(db.reviewDao())
+                val reviewRepo = LocalReviewRepository(db.reviewDao(), db.highlightDao())
 
                 return ReadingMemoryViewModel(
                     statsRepository = statsRepo,

@@ -148,4 +148,79 @@ class KnowledgeExportTest {
         val resultString = out.toString(StandardCharsets.UTF_8.name())
         assertEquals(testString, resultString)
     }
+
+    @Test
+    fun `test formatTopicKnowledge formats topic header and content`() {
+        val now = 1_700_000_000_000L
+        val book = CatalogBookEntity(
+            id = "b1", title = "Atomic Habits", author = "James Clear", description = "",
+            coverUrl = "", categoryId = "", fileUrl = "", fileSizeBytes = 0,
+            contentVersion = 1, contentHash = null, isFeatured = false, isNew = false,
+            isPremium = false, rating = 0.0f, publishedDate = null, updatedAt = now,
+            format = PublicationFormat.EPUB
+        )
+        val hl = HighlightEntity(
+            id = "hl1", bookId = "b1", locatorJson = "{}",
+            text = "You do not rise to the level of your goals.",
+            color = "YELLOW", note = "Focus on systems", createdAt = now, updatedAt = now
+        )
+        val list = listOf(Triple(book, listOf(hl), emptyList<BookmarkEntity>()))
+
+        val markdown = KnowledgeExporter.formatTopicKnowledge("YELLOW", list)
+        assertTrue(markdown.contains("# NoCap — Tổng hợp theo chủ đề: YELLOW"))
+        assertTrue(markdown.contains("# Atomic Habits"))
+        assertTrue(markdown.contains("Focus on systems"))
+    }
+
+    @Test
+    fun `test formatAnkiCards produces valid TSV with headers and tags`() {
+        val now = 1_700_000_000_000L
+        val book = CatalogBookEntity(
+            id = "b1", title = "Clean Code", author = "Robert C. Martin", description = "",
+            coverUrl = "", categoryId = "", fileUrl = "", fileSizeBytes = 0,
+            contentVersion = 1, contentHash = null, isFeatured = false, isNew = false,
+            isPremium = false, rating = 0.0f, publishedDate = null, updatedAt = now,
+            format = PublicationFormat.EPUB
+        )
+        val hl = HighlightEntity(
+            id = "hl1", bookId = "b1", locatorJson = "{}",
+            text = "Clean code always looks like it was written by someone who cares.",
+            color = "GREEN", note = "Definition of clean code", createdAt = now, updatedAt = now
+        )
+        val item = com.nocap.app.domain.model.HighlightWithBook(highlight = hl, book = book)
+
+        val tsv = KnowledgeExporter.formatAnkiCards(listOf(item))
+
+        assertTrue(tsv.contains("#separator:tab"))
+        assertTrue(tsv.contains("#html:true"))
+        assertTrue(tsv.contains("#tags column:3"))
+        assertTrue(tsv.contains("Definition of clean code"))
+        assertTrue(tsv.contains("Clean code always looks like it was written by someone who cares."))
+        assertTrue(tsv.contains("Clean_Code"))
+    }
+
+    @Test
+    fun `test formatAnkiCards escapes HTML characters and normalizes CRLF`() {
+        val now = 1_700_000_000_000L
+        val book = CatalogBookEntity(
+            id = "b1", title = "Algorithms & Data Structures", author = "Author <Unknown>", description = "",
+            coverUrl = "", categoryId = "", fileUrl = "", fileSizeBytes = 0,
+            contentVersion = 1, contentHash = null, isFeatured = false, isNew = false,
+            isPremium = false, rating = 0.0f, publishedDate = null, updatedAt = now,
+            format = PublicationFormat.EPUB
+        )
+        val hl = HighlightEntity(
+            id = "hl1", bookId = "b1", locatorJson = "{}",
+            text = "Line 1\r\nLine 2 with <tag> & \"quotes\"",
+            color = "YELLOW", note = "Condition: a < b && b > c", createdAt = now, updatedAt = now
+        )
+        val item = com.nocap.app.domain.model.HighlightWithBook(highlight = hl, book = book)
+
+        val tsv = KnowledgeExporter.formatAnkiCards(listOf(item))
+
+        assertTrue(tsv.contains("Condition: a &lt; b &amp;&amp; b &gt; c"))
+        assertTrue(tsv.contains("Line 1<br>Line 2 with &lt;tag&gt; &amp; &quot;quotes&quot;"))
+        assertFalse("Must not contain unescaped raw CRLF", tsv.contains("\r\n"))
+    }
 }
+
