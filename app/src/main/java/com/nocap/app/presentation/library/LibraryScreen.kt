@@ -19,6 +19,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
@@ -250,37 +253,31 @@ fun LibraryScreen(
             if (!uiState.isSelectionMode) {
                 when (uiState.selectedTab) {
                     LibraryTab.COLLECTIONS -> {
-                        ExtendedFloatingActionButton(
+                        FloatingActionButton(
                             onClick = {
                                 newCollectionName = ""
                                 showCreateCollectionDialog = true
                             },
-                            icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                            text = { Text("Tạo bộ sưu tập") },
                             containerColor = MaterialTheme.colorScheme.primaryContainer,
                             contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = localize("Tạo bộ sưu tập"))
+                        }
                     }
                     LibraryTab.TAGS -> {
-                        ExtendedFloatingActionButton(
+                        FloatingActionButton(
                             onClick = {
                                 newTagName = ""
                                 showCreateTagDialog = true
                             },
-                            icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                            text = { Text("Tạo thẻ mới") },
                             containerColor = MaterialTheme.colorScheme.primaryContainer,
                             contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = localize("Tạo thẻ mới"))
+                        }
                     }
                     else -> {
-                        ExtendedFloatingActionButton(
-                            onClick = { showImportSourceSheet = true },
-                            icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                            text = { Text("Thêm tài liệu") },
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
+                        // Removed oversized FAB on library tabs per UX request, as Add button is already in search bar and top bar
                     }
                 }
             }
@@ -344,9 +341,18 @@ fun LibraryScreen(
                                 IconButton(onClick = { viewModel.onSearchQueryChange("") }) {
                                     Icon(Icons.Default.Clear, contentDescription = localize("Xóa tìm kiếm"))
                                 }
+                            } else {
+                                IconButton(onClick = { showImportSourceSheet = true }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = localize("Thêm tài liệu"),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
                             }
                         },
                         singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                         shape = RoundedCornerShape(12.dp),
                         colors = TextFieldDefaults.colors(
                             focusedIndicatorColor = Color.Transparent,

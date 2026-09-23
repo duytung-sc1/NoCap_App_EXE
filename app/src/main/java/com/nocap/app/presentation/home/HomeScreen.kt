@@ -109,9 +109,11 @@ fun HomeScreen(
             }
         } else {
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = innerPadding.calculateTopPadding()),
                 contentPadding = PaddingValues(
-                    top = innerPadding.calculateTopPadding() + 4.dp,
+                    top = 10.dp,
                     bottom = innerPadding.calculateBottomPadding() + 24.dp
                 ),
                 verticalArrangement = Arrangement.spacedBy(0.dp)
@@ -247,20 +249,10 @@ fun HomeScreen(
 
                 // 5. Explore More (Secondary Discovery)
                 if (uiState.featuredBooks.isNotEmpty() || uiState.categories.isNotEmpty() || uiState.newBooks.isNotEmpty()) {
-                    item {
-                        SectionHeader(title = "Khám phá thêm")
-                    }
-
                     // Featured books
                     if (uiState.featuredBooks.isNotEmpty()) {
                         item {
-                            Text(
-                                text = "Sách tuyển chọn",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
-                            )
+                            SectionHeader(title = "Sách tuyển chọn")
                         }
                         item {
                             LazyRow(
@@ -514,7 +506,7 @@ private fun SectionHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -528,7 +520,8 @@ private fun SectionHeader(
         if (onSeeAll != null) {
             TextButton(
                 onClick = onSeeAll,
-                modifier = Modifier.heightIn(min = 48.dp)
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                modifier = Modifier.heightIn(min = 36.dp)
             ) {
                 Text(
                     text = "Xem tất cả",
@@ -568,13 +561,13 @@ private fun CategoryChip(
         onClick = onClick,
         shape = RoundedCornerShape(50),
         color = MaterialTheme.colorScheme.primaryContainer,
-        modifier = Modifier.heightIn(min = 48.dp)
+        modifier = Modifier.heightIn(min = 38.dp)
     ) {
         Text(
             text = category.vietnameseName,
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onPrimaryContainer,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
         )
     }
 }

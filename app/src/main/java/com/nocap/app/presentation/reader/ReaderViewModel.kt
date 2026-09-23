@@ -478,7 +478,7 @@ class ReaderViewModel(
     }
 
     // Search inside EPUB
-    fun onSearchQueryChanged(query: String) {
+    fun onSearchQueryChanged(query: String, immediate: Boolean = false) {
         _searchQuery.value = query
         searchJob?.cancel()
 
@@ -496,7 +496,9 @@ class ReaderViewModel(
         }
 
         searchJob = viewModelScope.launch {
-            delay(350) // Debounce input
+            if (!immediate) {
+                delay(350) // Debounce input
+            }
             _isSearching.value = true
             _searchResults.value = emptyList()
 

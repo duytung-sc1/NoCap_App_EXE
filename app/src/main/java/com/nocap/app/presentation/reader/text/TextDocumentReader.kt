@@ -30,6 +30,9 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -537,6 +540,34 @@ fun TextDocumentReader(
                                 },
                                 placeholder = { Text("Tìm trong tài liệu...") },
                                 singleLine = true,
+                                keyboardOptions = KeyboardOptions(
+                                    imeAction = ImeAction.Search
+                                ),
+                                keyboardActions = KeyboardActions(
+                                    onSearch = {
+                                        if (searchMatches.isNotEmpty()) {
+                                            val nextIndex = if (currentMatchIndex < searchMatches.size - 1) currentMatchIndex + 1 else 0
+                                            currentMatchIndex = nextIndex
+                                            scope.launch {
+                                                listState.animateScrollToItem(searchMatches[nextIndex] + TEXT_READER_HEADER_ITEMS)
+                                            }
+                                        } else if (searchQuery.isNotBlank()) {
+                                            val matches = mutableListOf<Int>()
+                                            doc.blocks.forEachIndexed { i, b ->
+                                                if (b.plainText.contains(searchQuery, ignoreCase = true)) {
+                                                    matches.add(i)
+                                                }
+                                            }
+                                            searchMatches = matches
+                                            currentMatchIndex = 0
+                                            if (matches.isNotEmpty()) {
+                                                scope.launch {
+                                                    listState.animateScrollToItem(matches.first() + TEXT_READER_HEADER_ITEMS)
+                                                }
+                                            }
+                                        }
+                                    }
+                                ),
                                 modifier = Modifier.weight(1f),
                                 colors = TextFieldDefaults.colors(
                                     focusedContainerColor = Color.Transparent,
@@ -1053,7 +1084,11 @@ private fun buildSpannedText(
             val match = plainText.indexOf(searchHighlight, startIndex = start, ignoreCase = true)
             if (match < 0) break
             addStyle(
-                SpanStyle(background = Color(0xFFFFF176), color = Color.Black),
+                SpanStyle(
+                    fontWeight = FontWeight.Bold,
+                    background = Color(0xFFFFF176),
+                    color = Color.Black
+                ),
                 match,
                 match + searchHighlight.length
             )

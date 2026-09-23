@@ -11,18 +11,26 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -59,6 +67,12 @@ fun KnowledgeSearchScreen(
                             .fillMaxWidth()
                             .padding(vertical = 4.dp),
                         singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = {
+                            if (uiState.query.isNotBlank()) {
+                                viewModel.onQueryChange(uiState.query.trim())
+                            }
+                        }),
                         shape = RoundedCornerShape(24.dp),
                         trailingIcon = {
                             if (uiState.query.isNotEmpty()) {
@@ -208,6 +222,7 @@ fun KnowledgeSearchScreen(
                     items(uiState.results) { result ->
                         SearchResultCard(
                             result = result,
+                            query = uiState.query,
                             onClick = {
                                 if (result.type == KnowledgeItemType.DOCUMENT) {
                                     onNavigateToReader(result.bookId, null)
@@ -226,6 +241,7 @@ fun KnowledgeSearchScreen(
 @Composable
 fun SearchResultCard(
     result: KnowledgeSearchResult,
+    query: String = "",
     onClick: () -> Unit
 ) {
     val typeIcon = when (result.type) {
@@ -286,8 +302,9 @@ fun SearchResultCard(
 
             Spacer(modifier = Modifier.height(6.dp))
 
+            val annotatedTitle = rememberHighlightedText(result.title, query)
             Text(
-                text = result.title,
+                text = annotatedTitle,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 2,
@@ -296,8 +313,9 @@ fun SearchResultCard(
 
             if (result.snippet.isNotBlank()) {
                 Spacer(modifier = Modifier.height(4.dp))
+                val annotatedSnippet = rememberHighlightedText(result.snippet, query)
                 Text(
-                    text = result.snippet,
+                    text = annotatedSnippet,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 3,
@@ -326,6 +344,41 @@ fun SearchResultCard(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.outline
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun rememberHighlightedText(text: String, query: String): AnnotatedString {
+    return remember(text, query) {
+        buildAnnotatedString {
+            val trimmedQuery = query.trim()
+            if (trimmedQuery.isEmpty()) {
+                append(text)
+            } else {
+                var start = 0
+                while (start < text.length) {
+                    val matchIndex = text.indexOf(trimmedQuery, startIndex = start, ignoreCase = true)
+                    if (matchIndex < 0) {
+                        append(text.substring(start))
+                        break
+                    }
+                    if (matchIndex > start) {
+                        append(text.substring(start, matchIndex))
+                    }
+                    val matchEnd = matchIndex + trimmedQuery.length
+                    withStyle(
+                        SpanStyle(
+                            fontWeight = FontWeight.Bold,
+                            background = Color(0xFFFFF176).copy(alpha = 0.8f),
+                            color = Color.Black
+                        )
+                    ) {
+                        append(text.substring(matchIndex, matchEnd))
+                    }
+                    start = matchEnd
                 }
             }
         }

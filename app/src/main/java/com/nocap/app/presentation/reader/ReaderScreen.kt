@@ -104,9 +104,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -693,12 +699,13 @@ fun ReaderScreen(
                                 query = searchQuery,
                                 isSearching = isSearching,
                                 results = searchResults,
-                                onQueryChange = viewModel::onSearchQueryChanged,
+                                onQueryChange = { viewModel.onSearchQueryChanged(it, immediate = false) },
                                 onClearQuery = viewModel::clearSearch,
                                 onResultSelected = { result ->
                                     showSearchSheet = false
                                     navigatorFragment?.go(result.locator, animated = true)
-                                }
+                                },
+                                onSearchImmediate = { viewModel.onSearchQueryChanged(it, immediate = true) }
                             )
                         }
                     }
@@ -1165,7 +1172,8 @@ fun InBookSearchSheetContent(
     results: List<SearchResultItem>,
     onQueryChange: (String) -> Unit,
     onClearQuery: () -> Unit,
-    onResultSelected: (SearchResultItem) -> Unit
+    onResultSelected: (SearchResultItem) -> Unit,
+    onSearchImmediate: ((String) -> Unit)? = null
 ) {
     Column(
         modifier = Modifier
@@ -1199,6 +1207,17 @@ fun InBookSearchSheetContent(
                 onValueChange = onQueryChange,
                 placeholder = { Text("Nhập từ khóa tìm kiếm...") },
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = {
+                    if (query.isNotBlank()) {
+                        val trimmed = query.trim()
+                        if (onSearchImmediate != null) {
+                            onSearchImmediate(trimmed)
+                        } else {
+                            onQueryChange(trimmed)
+                        }
+                    }
+                }),
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 trailingIcon = {
                     if (query.isNotBlank()) {
@@ -1255,8 +1274,40 @@ fun InBookSearchSheetContent(
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                             }
+                            val annotatedSnippet = remember(res.snippet, query) {
+                                buildAnnotatedString {
+                                    val snippetText = res.snippet
+                                    val trimmedQuery = query.trim()
+                                    if (trimmedQuery.isEmpty()) {
+                                        append(snippetText)
+                                    } else {
+                                        var start = 0
+                                        while (start < snippetText.length) {
+                                            val matchIndex = snippetText.indexOf(trimmedQuery, startIndex = start, ignoreCase = true)
+                                            if (matchIndex < 0) {
+                                                append(snippetText.substring(start))
+                                                break
+                                            }
+                                            if (matchIndex > start) {
+                                                append(snippetText.substring(start, matchIndex))
+                                            }
+                                            val matchEnd = matchIndex + trimmedQuery.length
+                                            withStyle(
+                                                SpanStyle(
+                                                    fontWeight = FontWeight.Bold,
+                                                    background = Color(0xFFFFF176).copy(alpha = 0.8f),
+                                                    color = Color.Black
+                                                )
+                                            ) {
+                                                append(snippetText.substring(matchIndex, matchEnd))
+                                            }
+                                            start = matchEnd
+                                        }
+                                    }
+                                }
+                            }
                             Text(
-                                text = res.snippet,
+                                text = annotatedSnippet,
                                 style = MaterialTheme.typography.bodyMedium,
                                 maxLines = 3,
                                 overflow = TextOverflow.Ellipsis
