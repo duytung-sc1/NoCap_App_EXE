@@ -85,4 +85,23 @@ class AppLanguageUnitTest {
             UiTranslations.translate("Bạn đã ôn luyện xong 7 thẻ trong phiên này.", AppLanguage.ENGLISH)
         )
     }
+
+    @Test
+    fun readerAndBackupFailuresRemainLocalized() {
+        assertEquals(
+            "Unable to load page 3. The image may be damaged or unsupported.",
+            UiTranslations.translate(
+                "Không thể tải trang 3. Tệp ảnh có thể bị hỏng hoặc không được hỗ trợ.",
+                AppLanguage.ENGLISH
+            )
+        )
+        assertEquals(
+            "Unable to extract text",
+            UiTranslations.translate("Không thể trích xuất văn bản", AppLanguage.ENGLISH)
+        )
+        assertEquals(
+            "Preparing and uploading the backup…",
+            UiTranslations.translate("Đang chuẩn bị và tải bản sao lưu…", AppLanguage.ENGLISH)
+        )
+    }
 }

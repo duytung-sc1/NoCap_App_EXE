@@ -36,6 +36,18 @@ class PdfTextExtractorTest {
         assertEquals(0, result.pageIndex)
         assertEquals("", result.text)
         assertEquals(0, result.wordCount)
+        assertTrue(result.errorMessage?.contains("không hợp lệ") == true)
+    }
+
+    @Test
+    fun `malformed PDF reports extraction error instead of looking like a scanned page`() {
+        val malformed = tempFolder.newFile("malformed.pdf")
+        malformed.writeText("not-a-pdf".repeat(20))
+
+        val result = PdfTextExtractor.extractPageText(malformed, targetPageIndex = 0)
+
+        assertTrue(result.text.isEmpty())
+        assertTrue(result.errorMessage?.contains("cấu trúc PDF") == true)
     }
 
     @Test

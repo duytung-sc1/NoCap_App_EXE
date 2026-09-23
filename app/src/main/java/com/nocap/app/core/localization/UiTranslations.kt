@@ -451,6 +451,12 @@ internal object UiTranslations {
         match("Không thể tạo danh sách ôn tập: (.+)")?.let { m ->
             return "Unable to create the review queue: ${m.groupValues[1]}"
         }
+        match("Không thể tải trang (\\d+)\\. Tệp ảnh có thể bị hỏng hoặc không được hỗ trợ\\.")?.let { m ->
+            return "Unable to load page ${m.groupValues[1]}. The image may be damaged or unsupported."
+        }
+        match("Không thể hiển thị trang (\\d+)\\. Định dạng ảnh có thể bị hỏng hoặc không được hỗ trợ\\.")?.let { m ->
+            return "Unable to display page ${m.groupValues[1]}. The image format may be damaged or unsupported."
+        }
         match("Dữ liệu hiện tại sẽ được thay thế bằng bản sao lưu lúc (.+) \\((.+) MB\\)\\. Thao tác này sẽ ghi đè thư viện hiện tại\\.")?.let { m ->
             return "The current library will be replaced by the backup from ${m.groupValues[1]} (${m.groupValues[2]} MB). This overwrites the current library."
         }

@@ -10,7 +10,11 @@ import com.nocap.app.BuildConfig
 import com.nocap.app.core.database.AppDatabase
 import com.nocap.app.data.auth.CloudAuthRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -20,6 +24,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.OutputStream
 import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.TimeUnit
@@ -37,20 +42,31 @@ data class CloudBackupSnapshot(
 )
 
 class CloudBackupRepository(private val context: Context) {
-    private val profile = com.nocap.app.data.sync.Profiles.active.value
-    private val profileFiles = com.nocap.app.data.sync.Profiles.files(context, profile)
-
-    private val database = AppDatabase.getInstance(context, profile)
     private val client = OkHttpClient.Builder().readTimeout(120, TimeUnit.SECONDS).writeTimeout(120, TimeUnit.SECONDS).build()
 
-    private suspend fun token(requireCloud: Boolean = true): String {
+    private data class BackupScope(
+        val profile: String,
+        val files: File,
+        val database: AppDatabase
+    )
+
+    private fun currentScope(): BackupScope {
+        val profile = com.nocap.app.data.sync.Profiles.active.value
+        check(profile.startsWith("ACCOUNT:")) { "Vui lòng đăng nhập để sao lưu hoặc khôi phục" }
+        return BackupScope(
+            profile = profile,
+            files = com.nocap.app.data.sync.Profiles.files(context, profile),
+            database = AppDatabase.getInstance(context, profile)
+        )
+    }
+
+    private suspend fun token(profile: String): String {
         val auth = CloudAuthRepository.getInstance(context)
         val token = auth.getIdToken(false) ?: error("Vui lòng đăng nhập")
         val user = client.newCall(Request.Builder().url("${BuildConfig.BACKEND_BASE_URL}/api/v1/me").header("Authorization", "Bearer $token").build()).execute().use {
             check(it.isSuccessful) { "Phiên đăng nhập hết hạn" }; JSONObject(it.body!!.string()).getString("id")
         }
         check(profile == "ACCOUNT:$user") { "Tài khoản đã thay đổi; vui lòng mở lại trang sao lưu" }
-        if (requireCloud) com.nocap.app.data.billing.EntitlementRepository.get(context).require(com.nocap.app.data.billing.Feature.CLOUD_BACKUP, profile)
         return token
     }
 
@@ -65,7 +81,8 @@ class CloudBackupRepository(private val context: Context) {
     }
 
     suspend fun listBackups(): Result<List<CloudBackupSnapshot>> = withContext(Dispatchers.IO) { runCatching {
-        val session = token()
+        val scope = currentScope()
+        val session = token(scope.profile)
         val response = call("backups", session)
         val json = JSONObject(response.use { it.body!!.string() })
         val array = json.optJSONArray("backups") ?: JSONArray()
@@ -84,26 +101,50 @@ class CloudBackupRepository(private val context: Context) {
         list
     } }
 
-    private fun tables(): List<String> = database.openHelper.writableDatabase.query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'sync_%' AND name NOT IN ('android_metadata','room_master_table')").use { cursor ->
+    private fun tables(database: AppDatabase): List<String> = database.openHelper.writableDatabase.query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'sync_%' AND name NOT IN ('android_metadata','room_master_table')").use { cursor ->
         buildList { while (cursor.moveToNext()) add(cursor.getString(0)) }
     }
 
     private fun hash(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 
-    private fun requireIdleDownloads() {
+    private fun requireIdleDownloads(database: AppDatabase) {
         database.openHelper.writableDatabase.query("SELECT COUNT(*) FROM downloaded_books WHERE download_status IN ('PENDING','DOWNLOADING')").use {
             it.moveToFirst(); check(it.getInt(0) == 0) { "Vui lòng hoàn tất hoặc hủy các lượt tải sách trước khi sao lưu/khôi phục." }
         }
     }
 
+    private fun cleanupStaleRestoreDirectories(database: AppDatabase, profileFiles: File) {
+        val root = profileFiles.canonicalFile
+        val retained = mutableSetOf<String>()
+        fun retainRoots(sql: String) {
+            database.openHelper.writableDatabase.query(sql).use { cursor ->
+                while (cursor.moveToNext()) {
+                    val path = cursor.getString(0)?.takeIf { it.isNotBlank() } ?: continue
+                    val file = runCatching { File(path).canonicalFile }.getOrNull() ?: continue
+                    if (!file.path.startsWith(root.path + File.separator)) continue
+                    val first = file.relativeTo(root).invariantSeparatorsPath.substringBefore('/')
+                    if (first.startsWith("restored-")) retained += first
+                }
+            }
+        }
+        retainRoots("SELECT local_file_path FROM downloaded_books WHERE local_file_path != ''")
+        retainRoots("SELECT custom_cover_path FROM catalog_books WHERE custom_cover_path IS NOT NULL AND custom_cover_path != ''")
+        root.listFiles()
+            ?.filter { it.isDirectory && it.name.startsWith("restored-") && it.name !in retained }
+            ?.forEach { it.deleteRecursively() }
+    }
+
     suspend fun backup(): Result<String> = withContext(Dispatchers.IO) { runCatching {
-        val session = token()
+        val scope = currentScope()
+        val database = scope.database
+        val profileFiles = scope.files
+        val session = token(scope.profile)
         val file = File.createTempFile("cloud-backup-", ".zip", context.cacheDir)
         try {
             val data = database.withTransaction {
-                requireIdleDownloads()
+                requireIdleDownloads(database)
                 JSONObject().put("version", database.openHelper.writableDatabase.version).put("filesRoot", profileFiles.absolutePath).put("tables", JSONObject().apply {
-                    for (table in tables()) {
+                    for (table in tables(database)) {
                         val rows = JSONArray()
                         database.openHelper.writableDatabase.query("SELECT * FROM \"$table\"").use { cursor ->
                             while (cursor.moveToNext()) {
@@ -124,10 +165,12 @@ class CloudBackupRepository(private val context: Context) {
                     }
                 })
             }
+            cleanupStaleRestoreDirectories(database, profileFiles)
             data.put("preferences", CloudPreferences(context).snapshot())
-            check(data.toString().toByteArray().size <= 64 * 1024 * 1024) { "Dữ liệu thư viện quá lớn" }
+            val databaseJson = data.toString().toByteArray()
+            check(databaseJson.size <= 64 * 1024 * 1024) { "Dữ liệu thư viện quá lớn" }
             ZipOutputStream(file.outputStream().buffered()).use { zip ->
-                zip.putNextEntry(ZipEntry("database.json")); zip.write(data.toString().toByteArray()); zip.closeEntry()
+                zip.putNextEntry(ZipEntry("database.json")); zip.write(databaseJson); zip.closeEntry()
                 var total = 0L
                 profileFiles.walkTopDown().onEnter { it.name !in setOf("temp", "datastore", "profiles") }.filter { it.isFile }.forEach { source ->
                     total += source.length(); check(total <= 2L * 1024 * 1024 * 1024) { "Thư viện vượt giới hạn sao lưu 2 GiB" }
@@ -135,19 +178,8 @@ class CloudBackupRepository(private val context: Context) {
                     zip.putNextEntry(ZipEntry("files/$relative")); source.inputStream().use { it.copyTo(zip) }; zip.closeEntry()
                 }
             }
-            val chunks = JSONArray()
             check(file.length() <= 2000L * 1024 * 1024) { "Bản sao lưu nén vượt giới hạn 2000 MiB" }
-            file.inputStream().use { input ->
-                val buffer = ByteArray(20 * 1024 * 1024)
-                while (true) {
-                    var size = 0
-                    while (size < buffer.size) { val read = input.read(buffer, size, buffer.size - size); if (read < 0) break; size += read }
-                    if (size == 0) break
-                    val bytes = buffer.copyOf(size); val digest = hash(bytes)
-                    call("objects/$digest", session, "PUT", bytes.toRequestBody("application/octet-stream".toMediaType())).close()
-                    chunks.put(digest)
-                }
-            }
+            val chunks = uploadChunks(file, session)
             val deviceName = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}"
                 .trim().ifBlank { "Android" }.take(100)
             val manifest = JSONObject().put("version", 1).put("chunks", chunks).put("size", file.length()).put("deviceName", deviceName)
@@ -157,11 +189,15 @@ class CloudBackupRepository(private val context: Context) {
     } }
 
     suspend fun restore(snapshotId: String? = null): Result<String> = withContext(Dispatchers.IO) { SyncScheduler.lock.withLock { runCatching {
-        val session = token()
+        val scope = currentScope()
+        val profile = scope.profile
+        val profileFiles = scope.files
+        val database = scope.database
+        val session = token(profile)
         // Pull the latest tombstones before replacing the local snapshot. This lets
         // restored rows explicitly recreate records deleted on another device or
         // before a reinstall instead of being removed again moments later.
-        SyncEngine(context, profile).run()
+        SyncEngine(context, profile).refreshRemoteStateForRestore()
         val path = if (snapshotId != null && snapshotId != "latest") "backups/$snapshotId" else "backup"
         val manifest = call(path, session).use { JSONObject(it.body!!.string()) }
         check(manifest.getInt("version") == 1) { "Phiên bản sao lưu không được hỗ trợ" }
@@ -172,15 +208,8 @@ class CloudBackupRepository(private val context: Context) {
         var committed = false
         val restoredFonts = mutableListOf<File>()
         try {
-            zipFile.outputStream().use { output ->
-                for (i in 0 until chunks.length()) {
-                    val digest = chunks.getString(i); check(Regex("[a-f0-9]{64}").matches(digest))
-                    val bytes = call("objects/$digest", session).use { response ->
-                        val body = response.body ?: error("Tệp trống"); check(body.contentLength() in 1..20L * 1024 * 1024); body.bytes()
-                    }
-                    check(hash(bytes) == digest) { "Bản sao lưu bị hỏng" }; output.write(bytes)
-                }
-            }
+            val digests = List(chunks.length()) { index -> chunks.getString(index) }
+            zipFile.outputStream().use { output -> downloadChunks(digests, session, output) }
             check(zipFile.length() == manifest.getLong("size")) { "Bản sao lưu thiếu dữ liệu" }
             CloudArchive.extract(zipFile, staging)
             val dbFile = File(staging, "database.json"); check(dbFile.length() <= 64L * 1024 * 1024) { "Dữ liệu sao lưu quá lớn" }
@@ -190,9 +219,9 @@ class CloudBackupRepository(private val context: Context) {
             val newRoot = File(staging, "files").absolutePath + "/"
             val rows = data.getJSONObject("tables")
             database.withTransaction {
-                requireIdleDownloads()
+                requireIdleDownloads(database)
                 val db = database.openHelper.writableDatabase
-                val known = tables(); check(rows.keys().asSequence().toSet() == known.toSet()) { "Cấu trúc dữ liệu không hợp lệ" }
+                val known = tables(database); check(rows.keys().asSequence().toSet() == known.toSet()) { "Cấu trúc dữ liệu không hợp lệ" }
                 db.execSQL("PRAGMA defer_foreign_keys=ON")
                 BackupRestoreSyncState.prepare(db)
                 known.reversed().forEach { db.execSQL("DELETE FROM \"$it\"") }
@@ -232,7 +261,7 @@ class CloudBackupRepository(private val context: Context) {
                                 else -> error("Giá trị sao lưu không hợp lệ")
                             }
                         }
-                        db.insert(table, SQLiteDatabase.CONFLICT_ABORT, content)
+                        check(db.insert(table, SQLiteDatabase.CONFLICT_ABORT, content) != -1L) { "Không thể khôi phục bản ghi trong $table" }
                     }
                 }
                 db.query("PRAGMA foreign_key_check").use { check(!it.moveToFirst()) { "Liên kết dữ liệu sao lưu bị lỗi" } }
@@ -240,18 +269,71 @@ class CloudBackupRepository(private val context: Context) {
             committed = true; dbFile.delete()
             data.optJSONObject("preferences")?.let { CloudPreferences(context).restore(it) }
             database.invalidationTracker.refreshVersionsAsync()
+            cleanupStaleRestoreDirectories(database, profileFiles)
             SyncScheduler.now(context, profile)
-            "Đã khôi phục thư viện. Đóng và mở lại ứng dụng để tải lại toàn bộ dữ liệu."
+            "Đã khôi phục thư viện. Dữ liệu trên thiết bị đã được cập nhật."
         } finally { zipFile.delete(); if (!committed) { staging.deleteRecursively(); restoredFonts.forEach { it.delete() } } }
     } } }
 
     suspend fun deleteBackup(snapshotId: String? = null): Result<String> = withContext(Dispatchers.IO) { runCatching {
+        val scope = currentScope()
         if (snapshotId != null && snapshotId != "latest") {
-            call("backups/$snapshotId", token(requireCloud = false), "DELETE").close()
+            call("backups/$snapshotId", token(scope.profile), "DELETE").close()
             "Đã xóa bản sao lưu."
         } else {
-            call("backup", token(requireCloud = false), "DELETE").close()
+            call("backup", token(scope.profile), "DELETE").close()
             "Đã xóa bản sao lưu trên đám mây."
         }
     } }
+
+    private suspend fun uploadChunks(file: File, session: String): JSONArray = coroutineScope {
+        val semaphore = Semaphore(2)
+        val uploads = mutableListOf<kotlinx.coroutines.Deferred<Pair<Int, String>>>()
+        file.inputStream().use { input ->
+            val buffer = ByteArray(20 * 1024 * 1024)
+            var index = 0
+            while (true) {
+                var size = 0
+                while (size < buffer.size) {
+                    val read = input.read(buffer, size, buffer.size - size)
+                    if (read < 0) break
+                    size += read
+                }
+                if (size == 0) break
+                semaphore.acquire()
+                val chunkIndex = index++
+                val bytes = buffer.copyOf(size)
+                val digest = hash(bytes)
+                uploads += async(Dispatchers.IO) {
+                    try {
+                        call("objects/$digest", session, "PUT", bytes.toRequestBody("application/octet-stream".toMediaType())).close()
+                        chunkIndex to digest
+                    } finally {
+                        semaphore.release()
+                    }
+                }
+            }
+        }
+        JSONArray().apply { uploads.awaitAll().sortedBy { it.first }.forEach { put(it.second) } }
+    }
+
+    private suspend fun downloadChunks(digests: List<String>, session: String, output: OutputStream) {
+        for (batch in digests.chunked(2)) {
+            val bytes = coroutineScope {
+                batch.map { digest ->
+                    async(Dispatchers.IO) {
+                        check(Regex("[a-f0-9]{64}").matches(digest)) { "Mã tệp sao lưu không hợp lệ" }
+                        val value = call("objects/$digest", session).use { response ->
+                            val body = response.body ?: error("Tệp sao lưu trống")
+                            check(body.contentLength() in 1..20L * 1024 * 1024) { "Kích thước tệp sao lưu không hợp lệ" }
+                            body.bytes()
+                        }
+                        check(hash(value) == digest) { "Bản sao lưu bị hỏng" }
+                        value
+                    }
+                }.awaitAll()
+            }
+            bytes.forEach(output::write)
+        }
+    }
 }

@@ -297,4 +297,14 @@ class SyncEngine(private val context: Context, private val profile: String) {
         uploadBlobs();pull()
         }
     }
+
+    /** Refreshes remote heads before a full restore without uploading local rows
+     * that are about to be replaced by the selected backup. */
+    suspend fun refreshRemoteStateForRestore() = withContext(Dispatchers.IO) {
+        authenticate()
+        // Multi-device sync is part of the current Free policy. The sync API still
+        // authenticates and authorizes every account, so an entitlement refresh here
+        // only adds two network round trips and can block an otherwise valid restore.
+        pull()
+    }
 }

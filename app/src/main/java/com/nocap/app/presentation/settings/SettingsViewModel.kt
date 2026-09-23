@@ -53,19 +53,19 @@ class SettingsViewModel(
     private val _snapshots = MutableStateFlow<List<CloudBackupSnapshot>>(emptyList())
     val snapshots: StateFlow<List<CloudBackupSnapshot>> = _snapshots.asStateFlow()
 
-    fun backupLibrary() = runCloud { repo ->
+    fun backupLibrary() = runCloud("Đang chuẩn bị và tải bản sao lưu…") { repo ->
         val res = repo.backup()
-        loadSnapshots()
+        if (res.isSuccess) loadSnapshots()
         res
     }
-    fun restoreLibrary(snapshotId: String? = null) = runCloud { repo ->
+    fun restoreLibrary(snapshotId: String? = null) = runCloud("Đang tải và kiểm tra bản sao lưu…") { repo ->
         val res = repo.restore(snapshotId)
-        loadSnapshots()
+        if (res.isSuccess) loadSnapshots()
         res
     }
-    fun deleteCloudBackup(snapshotId: String? = null) = runCloud { repo ->
+    fun deleteCloudBackup(snapshotId: String? = null) = runCloud("Đang xóa bản sao lưu…") { repo ->
         val res = repo.deleteBackup(snapshotId)
-        loadSnapshots()
+        if (res.isSuccess) loadSnapshots()
         res
     }
 
@@ -79,10 +79,11 @@ class SettingsViewModel(
         }
     }
 
-    private fun runCloud(action: suspend (CloudBackupRepository) -> Result<String>) {
+    private fun runCloud(pendingMessage: String, action: suspend (CloudBackupRepository) -> Result<String>) {
         if (cloudBusy.value) return
         val repository = cloudBackup ?: return
         cloudBusy.value = true
+        cloudMessage.value = pendingMessage
         viewModelScope.launch {
             try { val result = action(repository); cloudMessage.value = result.getOrElse { it.localizedMessage ?: "Thao tác thất bại" } }
             finally { cloudBusy.value = false }

@@ -12,7 +12,8 @@ object PdfTextExtractor {
     data class PageTextResult(
         val pageIndex: Int,
         val text: String,
-        val wordCount: Int
+        val wordCount: Int,
+        val errorMessage: String? = null
     )
 
     /**
@@ -33,14 +34,20 @@ object PdfTextExtractor {
      */
     fun extractPageText(file: File, targetPageIndex: Int): PageTextResult {
         if (!file.exists() || file.length() < 100) {
-            return PageTextResult(targetPageIndex, "", 0)
+            return PageTextResult(targetPageIndex, "", 0, "Không thể đọc tệp PDF vì tệp bị thiếu hoặc không hợp lệ.")
         }
         return try {
             val allPages = extractPagesText(file, maxPagesToSample = targetPageIndex + 1)
             allPages.find { it.pageIndex == targetPageIndex }
                 ?: PageTextResult(targetPageIndex, "", 0)
-        } catch (_: Exception) {
-            PageTextResult(targetPageIndex, "", 0)
+        } catch (error: Exception) {
+            PageTextResult(
+                targetPageIndex,
+                "",
+                0,
+                error.message?.takeIf { it.isNotBlank() }
+                    ?: "Không thể trích xuất văn bản từ trang PDF này."
+            )
         }
     }
 
@@ -48,24 +55,27 @@ object PdfTextExtractor {
      * Samples and extracts text across PDF pages up to [maxPagesToSample].
      */
     fun extractPagesText(file: File, maxPagesToSample: Int = 100): List<PageTextResult> {
+        require(file.isFile && file.length() >= 100) { "Tệp PDF bị thiếu hoặc không hợp lệ." }
+        require(maxPagesToSample > 0) { "Số trang cần đọc phải lớn hơn 0." }
         val results = mutableListOf<PageTextResult>()
-        try {
-            val bytes = file.readBytes()
-            val contentStreams = extractAllContentStreams(bytes)
+        val bytes = file.readBytes()
+        require(bytes.size >= 5 && String(bytes, 0, 5, StandardCharsets.US_ASCII) == "%PDF-") {
+            "Tệp không có cấu trúc PDF hợp lệ."
+        }
+        val contentStreams = extractAllContentStreams(bytes)
 
-            for ((idx, streamBytes) in contentStreams.withIndex()) {
-                if (idx >= maxPagesToSample) break
-                val pageText = parseStreamText(streamBytes)
-                val words = pageText.split(Regex("""\s+""")).filter { it.isNotBlank() }
-                results.add(
-                    PageTextResult(
-                        pageIndex = idx,
-                        text = pageText.trim(),
-                        wordCount = words.size
-                    )
+        for ((idx, streamBytes) in contentStreams.withIndex()) {
+            if (idx >= maxPagesToSample) break
+            val pageText = parseStreamText(streamBytes)
+            val words = pageText.split(Regex("""\s+""")).filter { it.isNotBlank() }
+            results.add(
+                PageTextResult(
+                    pageIndex = idx,
+                    text = pageText.trim(),
+                    wordCount = words.size
                 )
-            }
-        } catch (_: Exception) {}
+            )
+        }
 
         return results
     }
@@ -102,7 +112,8 @@ object PdfTextExtractor {
                 val isFlate = headerSnippet.contains("/FlateDecode")
 
                 val decompressed = if (isFlate) {
-                    inflateBytes(streamSlice) ?: streamSlice
+                    inflateBytes(streamSlice)
+                        ?: throw IllegalArgumentException("Không thể giải nén lớp văn bản PDF; tệp có thể bị hỏng hoặc dùng bộ lọc chưa được hỗ trợ.")
                 } else {
                     streamSlice
                 }

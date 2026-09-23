@@ -89,6 +89,9 @@ class MultiDeviceSyncTest {
     @Test fun `backup restore discards stale protocol state without emitting delete tombstones`() {
         database().use { db ->
             db.exec("INSERT INTO highlights VALUES('old','before restore')")
+            val restoredKey="726573746F726564"
+            val restoredRemoteId=java.util.UUID.nameUUIDFromBytes("nocap-sync-v1:highlights:$restoredKey".toByteArray()).toString()
+            db.exec("INSERT INTO sync_remote_heads(kind,remote_id,version,deleted) VALUES('highlights','$restoredRemoteId',4,1)")
             db.exec("INSERT INTO sync_pending(op_id,kind,local_key,revision,operation) VALUES('pending','highlights','6F6C64',1,'{}')")
             db.exec("INSERT INTO sync_inbox(seq,payload) VALUES(20,'{}')")
             db.exec("INSERT INTO sync_blobs(hash,path) VALUES('${"a".repeat(64)}','old-file')")
@@ -107,7 +110,10 @@ class MultiDeviceSyncTest {
             assertEquals(1,db.count("sync_outbox"))
             db.createStatement().use { statement ->
                 statement.executeQuery("SELECT local_key,deleted FROM sync_outbox").use {
-                    it.next();assertEquals("726573746F726564",it.getString(1));assertEquals(0,it.getInt(2))
+                    it.next();assertEquals(restoredKey,it.getString(1));assertEquals(0,it.getInt(2))
+                }
+                statement.executeQuery("SELECT version,deleted FROM sync_remote_heads WHERE kind='highlights' AND remote_id='$restoredRemoteId'").use {
+                    assertTrue(it.next());assertEquals(4,it.getInt(1));assertEquals(1,it.getInt(2))
                 }
                 statement.executeQuery("SELECT cursor,fetch_cursor,applying FROM sync_control").use {
                     it.next();assertEquals(12,it.getInt(1));assertEquals(12,it.getInt(2));assertEquals(0,it.getInt(3))

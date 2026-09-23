@@ -1,5 +1,6 @@
 package com.nocap.app.presentation.reader.archive
 
+import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -22,6 +23,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -232,19 +234,32 @@ fun ImageArchiveReader(
                 modifier = Modifier.fillMaxSize()
             ) { pageIdx ->
                 val page = pages[pageIdx]
-                var pageFile by remember { mutableStateOf<File?>(null) }
+                var pageFile by remember(file, book.contentVersion, page.entryName) { mutableStateOf<File?>(null) }
+                var pageError by remember(file, book.contentVersion, page.entryName) { mutableStateOf<String?>(null) }
+                var retryKey by remember(file, book.contentVersion, page.entryName) { mutableIntStateOf(0) }
 
-                LaunchedEffect(file, book.contentVersion, page.entryName) {
-                    withContext(Dispatchers.IO) {
+                LaunchedEffect(file, book.contentVersion, page.entryName, retryKey) {
+                    pageFile = null
+                    pageError = null
+                    val loaded = withContext(Dispatchers.IO) {
                         val cacheKey = com.nocap.app.data.parser.DocumentCacheKey.forFile(file, page.entryName, "${book.contentVersion}:${book.contentHash}")
                         val cacheFile = File(context.cacheDir, "cbz_$cacheKey.jpg")
-                        if (!cacheFile.isFile || cacheFile.length() == 0L) {
-                            try {
+                        try {
+                            if (!cacheFile.isFile || cacheFile.length() == 0L) {
                                 CbzParser.extractPageToFile(file, page.entryName, cacheFile)
-                            } catch (_: Exception) {}
+                            }
+                            cacheFile.takeIf { it.isFile && it.length() > 0L }
+                                ?: error("Trang ảnh không có nội dung")
+                        } catch (error: kotlinx.coroutines.CancellationException) {
+                            throw error
+                        } catch (error: Exception) {
+                            cacheFile.delete()
+                            Log.e("ImageArchiveReader", "Không thể giải nén trang ${pageIdx + 1}", error)
+                            null
                         }
-                        pageFile = cacheFile.takeIf { it.isFile && it.length() > 0L }
                     }
+                    pageFile = loaded
+                    if (loaded == null) pageError = "Không thể tải trang ${pageIdx + 1}. Tệp ảnh có thể bị hỏng hoặc không được hỗ trợ."
                 }
 
                 var scale by remember { mutableFloatStateOf(1f) }
@@ -282,6 +297,12 @@ fun ImageArchiveReader(
                             model = pageFile,
                             contentDescription = localize("Trang ${pageIdx + 1}"),
                             contentScale = ContentScale.Fit,
+                            onError = { state ->
+                                Log.e("ImageArchiveReader", "Không thể giải mã ảnh trang ${pageIdx + 1}", state.result.throwable)
+                                pageFile?.delete()
+                                pageFile = null
+                                pageError = "Không thể hiển thị trang ${pageIdx + 1}. Định dạng ảnh có thể bị hỏng hoặc không được hỗ trợ."
+                            },
                             modifier = Modifier
                                 .fillMaxSize()
                                 .graphicsLayer(
@@ -291,6 +312,20 @@ fun ImageArchiveReader(
                                     translationY = offset.y
                                 )
                         )
+                    } else if (pageError != null) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.padding(24.dp)
+                        ) {
+                            Text(
+                                text = pageError ?: "Không thể tải trang ảnh",
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            Button(onClick = { retryKey++ }) {
+                                Text("Thử lại")
+                            }
+                        }
                     } else {
                         CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                     }

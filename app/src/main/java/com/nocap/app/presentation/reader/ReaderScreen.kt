@@ -246,6 +246,7 @@ fun ReaderScreen(
     var pdfExtractedText by remember { mutableStateOf<String?>(null) }
     var pdfExtractPageIndex by remember { mutableIntStateOf(0) }
     var showPdfScannedAlert by remember { mutableStateOf(false) }
+    var pdfExtractionError by remember { mutableStateOf<String?>(null) }
 
     var navigatorFragment by remember { mutableStateOf<VisualNavigator?>(null) }
     var lastKnownLocator by remember { mutableStateOf<Locator?>(null) }
@@ -463,7 +464,9 @@ fun ReaderScreen(
                                 pdfExtractPageIndex = pageIndex
                                 scope.launch {
                                     val result = viewModel.extractPdfPageText(pageIndex)
-                                    if (result == null || result.text.isBlank()) {
+                                    pdfExtractionError = result?.errorMessage
+                                        ?: if (result == null) "Không tìm thấy tệp PDF trên thiết bị. Hãy tải lại tài liệu rồi thử lại." else null
+                                    if (result == null || result.errorMessage != null || result.text.isBlank()) {
                                         showPdfScannedAlert = true
                                     } else {
                                         pdfExtractedText = result.text
@@ -809,14 +812,15 @@ fun ReaderScreen(
     if (showPdfScannedAlert) {
         AlertDialog(
             onDismissRequest = { showPdfScannedAlert = false },
-            title = { Text("Không có văn bản để chọn") },
+            title = { Text(if (pdfExtractionError == null) "Không có văn bản để chọn" else "Không thể trích xuất văn bản") },
             text = {
                 Text(
-                    "Tài liệu PDF này ở dạng scan hoặc ảnh và không chứa lớp văn bản số. NoCap tôn trọng tính nguyên bản của tài liệu và không giả lập nhận dạng ký tự (OCR)."
+                    pdfExtractionError
+                        ?: "Tài liệu PDF này ở dạng scan hoặc ảnh và không chứa lớp văn bản số. NoCap tôn trọng tính nguyên bản của tài liệu và không giả lập nhận dạng ký tự (OCR)."
                 )
             },
             confirmButton = {
-                Button(onClick = { showPdfScannedAlert = false }) {
+                Button(onClick = { showPdfScannedAlert = false; pdfExtractionError = null }) {
                     Text("Đã hiểu")
                 }
             }
