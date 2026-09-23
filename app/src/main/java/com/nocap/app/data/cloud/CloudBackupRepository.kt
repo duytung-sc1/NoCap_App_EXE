@@ -16,6 +16,10 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
+import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.MediaType.Companion.toMediaType
@@ -42,7 +46,34 @@ data class CloudBackupSnapshot(
 )
 
 class CloudBackupRepository(private val context: Context) {
-    private val client = OkHttpClient.Builder().readTimeout(120, TimeUnit.SECONDS).writeTimeout(120, TimeUnit.SECONDS).build()
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
+        .connectionPool(ConnectionPool(5, 5, TimeUnit.MINUTES))
+        .build()
+
+    private suspend fun <T> retryIO(
+        times: Int = 3,
+        initialDelayMs: Long = 800,
+        factor: Double = 1.5,
+        block: suspend () -> T
+    ): T {
+        var currentDelay = initialDelayMs
+        repeat(times - 1) {
+            try {
+                return block()
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                val msg = e.message.orEmpty()
+                if (msg.contains("401") || msg.contains("403") || msg.contains("404")) throw e
+                delay(currentDelay)
+                currentDelay = (currentDelay * factor).toLong().coerceAtMost(3000L)
+            }
+        }
+        return block()
+    }
 
     private data class BackupScope(
         val profile: String,
@@ -63,14 +94,16 @@ class CloudBackupRepository(private val context: Context) {
     private suspend fun token(profile: String): String {
         val auth = CloudAuthRepository.getInstance(context)
         val token = auth.getIdToken(false) ?: error("Vui lòng đăng nhập")
-        val user = client.newCall(Request.Builder().url("${BuildConfig.BACKEND_BASE_URL}/api/v1/me").header("Authorization", "Bearer $token").build()).execute().use {
-            check(it.isSuccessful) { "Phiên đăng nhập hết hạn" }; JSONObject(it.body!!.string()).getString("id")
+        val user = retryIO {
+            client.newCall(Request.Builder().url("${BuildConfig.BACKEND_BASE_URL}/api/v1/me").header("Authorization", "Bearer $token").build()).execute().use {
+                check(it.isSuccessful) { "Phiên đăng nhập hết hạn" }; JSONObject(it.body!!.string()).getString("id")
+            }
         }
         check(profile == "ACCOUNT:$user") { "Tài khoản đã thay đổi; vui lòng mở lại trang sao lưu" }
         return token
     }
 
-    private fun call(path: String, token: String, method: String = "GET", body: RequestBody? = null): okhttp3.Response {
+    private fun executeCall(path: String, token: String, method: String = "GET", body: RequestBody? = null): okhttp3.Response {
         val response = client.newCall(Request.Builder().url("${BuildConfig.BACKEND_BASE_URL}/api/v1/cloud/$path")
             .header("Authorization", "Bearer $token").method(method, body).build()).execute()
         if (!response.isSuccessful) {
@@ -78,6 +111,12 @@ class CloudBackupRepository(private val context: Context) {
             error(message)
         }
         return response
+    }
+
+    private suspend fun call(path: String, token: String, method: String = "GET", body: RequestBody? = null): okhttp3.Response {
+        return retryIO {
+            executeCall(path, token, method, body)
+        }
     }
 
     suspend fun listBackups(): Result<List<CloudBackupSnapshot>> = withContext(Dispatchers.IO) { runCatching {
@@ -134,11 +173,57 @@ class CloudBackupRepository(private val context: Context) {
             ?.forEach { it.deleteRecursively() }
     }
 
+    private fun consolidateProfileFiles(database: AppDatabase, profileFiles: File) {
+        val root = profileFiles.canonicalFile
+        val appFilesDir = context.filesDir.canonicalFile
+        val db = database.openHelper.writableDatabase
+
+        db.query("SELECT book_id, local_file_path FROM downloaded_books WHERE local_file_path != ''").use { cursor ->
+            while (cursor.moveToNext()) {
+                val bookId = cursor.getString(0)
+                val path = cursor.getString(1)
+                val file = runCatching { File(path).canonicalFile }.getOrNull() ?: continue
+                if (!file.exists() || !file.isFile) continue
+                if (file.path.startsWith(root.path + File.separator)) continue
+                if (file.path.startsWith(appFilesDir.path + File.separator)) {
+                    val subDir = if (file.parentFile?.name == "books") "books" else "imported"
+                    val targetDir = File(root, subDir).apply { mkdirs() }
+                    val targetFile = File(targetDir, file.name)
+                    if (!targetFile.exists()) {
+                        file.copyTo(targetFile, overwrite = true)
+                    }
+                    val values = ContentValues().apply { put("local_file_path", targetFile.absolutePath) }
+                    db.update("downloaded_books", SQLiteDatabase.CONFLICT_REPLACE, values, "book_id=?", arrayOf(bookId))
+                }
+            }
+        }
+
+        db.query("SELECT id, custom_cover_path FROM catalog_books WHERE custom_cover_path IS NOT NULL AND custom_cover_path != ''").use { cursor ->
+            while (cursor.moveToNext()) {
+                val id = cursor.getString(0)
+                val path = cursor.getString(1)
+                val file = runCatching { File(path).canonicalFile }.getOrNull() ?: continue
+                if (!file.exists() || !file.isFile) continue
+                if (file.path.startsWith(root.path + File.separator)) continue
+                if (file.path.startsWith(appFilesDir.path + File.separator)) {
+                    val targetDir = File(root, "covers").apply { mkdirs() }
+                    val targetFile = File(targetDir, file.name)
+                    if (!targetFile.exists()) {
+                        file.copyTo(targetFile, overwrite = true)
+                    }
+                    val values = ContentValues().apply { put("custom_cover_path", targetFile.absolutePath) }
+                    db.update("catalog_books", SQLiteDatabase.CONFLICT_REPLACE, values, "id=?", arrayOf(id))
+                }
+            }
+        }
+    }
+
     suspend fun backup(): Result<String> = withContext(Dispatchers.IO) { runCatching {
         val scope = currentScope()
         val database = scope.database
         val profileFiles = scope.files
         val session = token(scope.profile)
+        consolidateProfileFiles(database, profileFiles)
         val file = File.createTempFile("cloud-backup-", ".zip", context.cacheDir)
         try {
             val data = database.withTransaction {
@@ -194,10 +279,12 @@ class CloudBackupRepository(private val context: Context) {
         val profileFiles = scope.files
         val database = scope.database
         val session = token(profile)
-        // Pull the latest tombstones before replacing the local snapshot. This lets
-        // restored rows explicitly recreate records deleted on another device or
-        // before a reinstall instead of being removed again moments later.
-        SyncEngine(context, profile).refreshRemoteStateForRestore()
+        // Best-effort remote state pull: do not block or abort restore if network is slow/failing
+        runCatching {
+            withTimeoutOrNull(5000L) {
+                SyncEngine(context, profile).refreshRemoteStateForRestore()
+            }
+        }
         val path = if (snapshotId != null && snapshotId != "latest") "backups/$snapshotId" else "backup"
         val manifest = call(path, session).use { JSONObject(it.body!!.string()) }
         check(manifest.getInt("version") == 1) { "Phiên bản sao lưu không được hỗ trợ" }
@@ -246,7 +333,17 @@ class CloudBackupRepository(private val context: Context) {
                                 is Long -> content.put(column, value)
                                 is Number -> content.put(column, value.toDouble())
                                 is String -> {
-                                    var restored = CloudArchive.restoredPath(table, column, value, oldRoot, File(newRoot))
+                                    var restored: String? = try {
+                                        CloudArchive.restoredPath(table, column, value, oldRoot, File(newRoot))
+                                    } catch (e: Exception) {
+                                        if (table == "downloaded_books" && column == "local_file_path") {
+                                            if (value.isNotBlank() && File(value).exists()) value else ""
+                                        } else if (table == "catalog_books" && column == "custom_cover_path") {
+                                            if (value.isNotBlank() && File(value).exists()) value else null
+                                        } else {
+                                            throw e
+                                        }
+                                    }
                                     if (table == "catalog_books" && column == "id") {
                                         require(com.nocap.app.core.util.DocumentIds.isSafe(value)) { "Mã tài liệu không hợp lệ" }
                                     }
@@ -256,7 +353,41 @@ class CloudBackupRepository(private val context: Context) {
                                         val target = File(File(profileFiles, "custom_fonts").apply { mkdirs() }, "${UUID.randomUUID()}-${source.name}")
                                         source.copyTo(target); restoredFonts.add(target); restored = target.name
                                     }
-                                    content.put(column, restored)
+                                    if (table == "downloaded_books" && column == "local_file_path" && !restored.isNullOrEmpty()) {
+                                        val f = File(restored)
+                                        if (!f.exists()) {
+                                            val rootDir = File(newRoot)
+                                            val direct = File(rootDir, f.name)
+                                            val imported = File(rootDir, "imported/${f.name}")
+                                            val books = File(rootDir, "books/${f.name}")
+                                            restored = when {
+                                                direct.exists() -> direct.absolutePath
+                                                imported.exists() -> imported.absolutePath
+                                                books.exists() -> books.absolutePath
+                                                value.isNotEmpty() && File(value).exists() -> value
+                                                else -> ""
+                                            }
+                                        }
+                                    }
+                                    if (table == "catalog_books" && column == "custom_cover_path" && !restored.isNullOrEmpty()) {
+                                        val f = File(restored)
+                                        if (!f.exists()) {
+                                            val rootDir = File(newRoot)
+                                            val direct = File(rootDir, f.name)
+                                            val covers = File(rootDir, "covers/${f.name}")
+                                            restored = when {
+                                                direct.exists() -> direct.absolutePath
+                                                covers.exists() -> covers.absolutePath
+                                                value.isNotEmpty() && File(value).exists() -> value
+                                                else -> null
+                                            }
+                                        }
+                                    }
+                                    if (restored != null) {
+                                        content.put(column, restored)
+                                    } else {
+                                        content.putNull(column)
+                                    }
                                 }
                                 else -> error("Giá trị sao lưu không hợp lệ")
                             }
@@ -287,7 +418,7 @@ class CloudBackupRepository(private val context: Context) {
     } }
 
     private suspend fun uploadChunks(file: File, session: String): JSONArray = coroutineScope {
-        val semaphore = Semaphore(2)
+        val semaphore = Semaphore(3)
         val uploads = mutableListOf<kotlinx.coroutines.Deferred<Pair<Int, String>>>()
         file.inputStream().use { input ->
             val buffer = ByteArray(20 * 1024 * 1024)
@@ -306,7 +437,9 @@ class CloudBackupRepository(private val context: Context) {
                 val digest = hash(bytes)
                 uploads += async(Dispatchers.IO) {
                     try {
-                        call("objects/$digest", session, "PUT", bytes.toRequestBody("application/octet-stream".toMediaType())).close()
+                        retryIO {
+                            call("objects/$digest", session, "PUT", bytes.toRequestBody("application/octet-stream".toMediaType())).close()
+                        }
                         chunkIndex to digest
                     } finally {
                         semaphore.release()
@@ -318,15 +451,17 @@ class CloudBackupRepository(private val context: Context) {
     }
 
     private suspend fun downloadChunks(digests: List<String>, session: String, output: OutputStream) {
-        for (batch in digests.chunked(2)) {
+        for (batch in digests.chunked(3)) {
             val bytes = coroutineScope {
                 batch.map { digest ->
                     async(Dispatchers.IO) {
                         check(Regex("[a-f0-9]{64}").matches(digest)) { "Mã tệp sao lưu không hợp lệ" }
-                        val value = call("objects/$digest", session).use { response ->
-                            val body = response.body ?: error("Tệp sao lưu trống")
-                            check(body.contentLength() in 1..20L * 1024 * 1024) { "Kích thước tệp sao lưu không hợp lệ" }
-                            body.bytes()
+                        val value = retryIO {
+                            call("objects/$digest", session).use { response ->
+                                val body = response.body ?: error("Tệp sao lưu trống")
+                                check(body.contentLength() in 1..20L * 1024 * 1024) { "Kích thước tệp sao lưu không hợp lệ" }
+                                body.bytes()
+                            }
                         }
                         check(hash(value) == digest) { "Bản sao lưu bị hỏng" }
                         value

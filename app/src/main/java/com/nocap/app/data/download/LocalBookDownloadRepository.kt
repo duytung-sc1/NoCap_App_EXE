@@ -27,8 +27,8 @@ class LocalBookDownloadRepository(
     private val catalogDao: CatalogDao,
     private val catalogRepository: CatalogRepository
 ) : BookDownloadRepository {
-    private val profile = com.nocap.app.data.sync.Profiles.active.value
-    private val profileFiles = com.nocap.app.data.sync.Profiles.files(context, profile)
+    private val profile get() = com.nocap.app.data.sync.Profiles.active.value
+    private val profileFiles get() = com.nocap.app.data.sync.Profiles.files(context, profile)
 
 
     private val workManager by lazy { WorkManager.getInstance(context) }

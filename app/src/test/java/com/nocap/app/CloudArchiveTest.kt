@@ -47,4 +47,32 @@ class CloudArchiveTest {
         val root=Files.createTempDirectory("cloud-test").toFile()
         try { val zip=archive(root,"files/large.txt","x".repeat(100000));assertThrows(IllegalArgumentException::class.java) { CloudArchive.extract(zip,File(root,"out"),1000) } } finally { root.deleteRecursively() }
     }
+    @Test fun restoredPathsSupportSymlinksAndLocalFiles() {
+        val root = Files.createTempDirectory("restore-path-compat").toFile()
+        try {
+            val old = "/data/user/0/app/files/profiles/account-a/"
+            val dataDataPath = "/data/data/app/files/profiles/account-a/books/symlink.epub"
+            assertEquals(
+                File(root, "books/symlink.epub").canonicalPath,
+                CloudArchive.restoredPath("downloaded_books", "local_file_path", dataDataPath, old, root)
+            )
+            val localImport = "/data/user/0/app/files/imported/book1.epub"
+            assertEquals(
+                File(root, "imported/book1.epub").canonicalPath,
+                CloudArchive.restoredPath("downloaded_books", "local_file_path", localImport, old, root)
+            )
+            val localCover = "/data/user/0/app/files/covers/cover1.jpg"
+            assertEquals(
+                File(root, "covers/cover1.jpg").canonicalPath,
+                CloudArchive.restoredPath("catalog_books", "custom_cover_path", localCover, old, root)
+            )
+            assertEquals(
+                File(root, "books/relative.epub").canonicalPath,
+                CloudArchive.restoredPath("downloaded_books", "local_file_path", "books/relative.epub", old, root)
+            )
+        } finally {
+            root.deleteRecursively()
+        }
+    }
 }
+

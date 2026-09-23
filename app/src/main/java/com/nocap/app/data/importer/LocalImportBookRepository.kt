@@ -50,8 +50,9 @@ class LocalImportBookRepository(
     private val database: com.nocap.app.core.database.AppDatabase = com.nocap.app.core.database.AppDatabase.getInstance(context)
 ) : ImportBookRepository {
     companion object { private val importLock = Mutex() }
-    private val profile = com.nocap.app.data.sync.Profiles.active.value
-    private val profileFiles = com.nocap.app.data.sync.Profiles.files(context, profile)
+    private val profile get() = com.nocap.app.data.sync.Profiles.active.value
+    private val profileFiles get() = com.nocap.app.data.sync.Profiles.files(context, profile)
+    private val currentDatabase get() = com.nocap.app.core.database.AppDatabase.getInstance(context, profile)
 
 
     override suspend fun importEpub(uri: Uri): Result<String> {
@@ -318,7 +319,7 @@ class LocalImportBookRepository(
             currentCoroutineContext().ensureActive()
             // Finish the atomic commit before cancellation can trigger file cleanup.
             withContext(kotlinx.coroutines.NonCancellable) {
-                database.withTransaction {
+                currentDatabase.withTransaction {
                     catalogDao.insertBook(catalogEntity)
                     downloadDao.upsertDownload(downloadEntity)
                 }

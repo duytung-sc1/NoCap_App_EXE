@@ -18,8 +18,8 @@ class LocalCustomFontRepository(
     private val context: Context,
     private val customFontDao: CustomFontDao
 ) : CustomFontRepository {
-    private val profile = com.nocap.app.data.sync.Profiles.active.value
-    private val profileFiles = com.nocap.app.data.sync.Profiles.files(context, profile)
+    private val profile get() = com.nocap.app.data.sync.Profiles.active.value
+    private val profileFiles get() = com.nocap.app.data.sync.Profiles.files(context, profile)
 
 
     companion object {

@@ -28,7 +28,14 @@ import java.util.concurrent.TimeUnit
 class SyncEngine(private val context: Context, private val profile: String) {
     private val room = AppDatabase.getInstance(context, profile)
     private val db get() = room.openHelper.writableDatabase
-    private val client = OkHttpClient.Builder().callTimeout(180, TimeUnit.SECONDS).build()
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .callTimeout(45, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
+        .connectionPool(okhttp3.ConnectionPool(5, 5, TimeUnit.MINUTES))
+        .build()
     private lateinit var token: String
 
     private suspend fun authenticate() {
