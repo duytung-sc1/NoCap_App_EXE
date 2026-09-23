@@ -12,6 +12,13 @@ data class ReviewStatsSummary(
     val totalCount: Int
 )
 
+sealed class AutoGenResult {
+    data class Added(val count: Int) : AutoGenResult()
+    object NoHighlightsAtAll : AutoGenResult()
+    object NoHighlightsWithNotes : AutoGenResult()
+    data class AllAlreadyInReview(val total: Int) : AutoGenResult()
+}
+
 interface ReviewRepository {
     fun observeDueItems(cutoffTime: Long = System.currentTimeMillis()): Flow<List<ReviewItemEntity>>
     fun observeDueItemsWithDetails(cutoffTime: Long = System.currentTimeMillis()): Flow<List<ReviewItemWithDetails>>
@@ -25,6 +32,11 @@ interface ReviewRepository {
     suspend fun submitReview(item: ReviewItemEntity, rating: ReviewRating, now: Long = System.currentTimeMillis()): Result<ReviewItemEntity>
     suspend fun toggleReviewEnabled(annotationId: String, isEnabled: Boolean): Result<Unit>
     fun observeAllReviewItems(): Flow<List<ReviewItemEntity>>
+    suspend fun getAllReviewItemsWithDetails(): List<ReviewItemWithDetails>
+    fun observeAllReviewItemsWithDetails(): Flow<List<ReviewItemWithDetails>>
+    suspend fun resetUnreviewedItemsToNow(now: Long = System.currentTimeMillis()): Int
+    suspend fun markAsMastered(annotationId: String): Result<ReviewItemEntity>
     suspend fun getReviewStats(now: Long = System.currentTimeMillis()): ReviewStatsSummary
     suspend fun autoGenerateReviewItems(bookId: String? = null, onlyWithNotes: Boolean = false): Result<Int>
+    suspend fun autoGenerateReviewItemsDetailed(bookId: String? = null, onlyWithNotes: Boolean = false): Result<AutoGenResult>
 }

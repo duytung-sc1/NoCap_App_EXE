@@ -20,7 +20,8 @@ import kotlinx.coroutines.withContext
 enum class SessionMode(val title: String, val maxItems: Int?, val durationMinutes: Int?) {
     STANDARD("Ôn tập ngắt quãng", null, null),
     QUICK_5("Ôn nhanh 5 phút", 10, 5),
-    QUICK_10("Ôn nhanh 10 phút", 20, 10)
+    QUICK_10("Ôn nhanh 10 phút", 20, 10),
+    ALL("Ôn tập tất cả thẻ", null, null)
 }
 
 data class ReviewQueueUiState(
@@ -66,7 +67,11 @@ class ReviewQueueViewModel(
             try {
                 val now = System.currentTimeMillis()
                 val due = withContext(Dispatchers.IO) {
-                    reviewRepository.getDueItemsWithDetails(now)
+                    if (mode == SessionMode.ALL) {
+                        reviewRepository.getAllReviewItemsWithDetails()
+                    } else {
+                        reviewRepository.getDueItemsWithDetails(now)
+                    }
                 }
                 val filtered = if (mode.maxItems != null) due.take(mode.maxItems) else due
                 val initialSeconds = mode.durationMinutes?.let { it * 60 }

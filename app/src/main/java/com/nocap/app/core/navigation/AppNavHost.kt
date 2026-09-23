@@ -198,6 +198,7 @@ fun AppNavHost(
                     val mode = when (modeStr) {
                         "QUICK_5" -> com.nocap.app.presentation.memory.review.SessionMode.QUICK_5
                         "QUICK_10" -> com.nocap.app.presentation.memory.review.SessionMode.QUICK_10
+                        "ALL" -> com.nocap.app.presentation.memory.review.SessionMode.ALL
                         else -> com.nocap.app.presentation.memory.review.SessionMode.STANDARD
                     }
                     ReviewQueueScreen(

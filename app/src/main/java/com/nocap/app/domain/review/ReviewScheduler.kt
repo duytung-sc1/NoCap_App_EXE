@@ -18,6 +18,7 @@ enum class MemoryState {
 object ReviewScheduler {
 
     const val ONE_DAY_MS: Long = 24L * 60 * 60 * 1000 // 86,400,000 ms
+    const val MASTERED_INTERVAL_DAYS: Int = 14
 
     /**
      * Determines the memory status of an item: DUE, LEARNING, or MASTERED.
@@ -25,7 +26,7 @@ object ReviewScheduler {
     fun memoryState(item: ReviewItemEntity, now: Long = System.currentTimeMillis()): MemoryState {
         return when {
             item.nextReviewAt <= now -> MemoryState.DUE
-            item.intervalDays >= 21 -> MemoryState.MASTERED
+            item.intervalDays >= MASTERED_INTERVAL_DAYS -> MemoryState.MASTERED
             else -> MemoryState.LEARNING
         }
     }
@@ -66,14 +67,15 @@ object ReviewScheduler {
                 newInterval = when (item.reviewCount) {
                     0 -> 1
                     1 -> 3
-                    else -> maxOf(3, (item.intervalDays * newEaseFactor).toInt())
+                    2 -> 7
+                    else -> maxOf(MASTERED_INTERVAL_DAYS, (item.intervalDays * newEaseFactor).toInt())
                 }
             }
             ReviewRating.EASY -> {
                 newInterval = when (item.reviewCount) {
                     0 -> 3
-                    1 -> 5
-                    else -> maxOf(5, (item.intervalDays * (newEaseFactor + 0.5f)).toInt())
+                    1 -> 7
+                    else -> maxOf(MASTERED_INTERVAL_DAYS, (item.intervalDays * (newEaseFactor + 0.5f)).toInt())
                 }
                 newEaseFactor = minOf(3.5f, newEaseFactor + 0.15f)
             }
@@ -93,20 +95,41 @@ object ReviewScheduler {
     }
 
     /**
-     * Creates a new review item for an annotation with initial 1-day schedule.
+     * Marks an item as mastered immediately.
+     */
+    fun markAsMastered(
+        item: ReviewItemEntity,
+        now: Long = System.currentTimeMillis()
+    ): ReviewItemEntity {
+        val interval = MASTERED_INTERVAL_DAYS
+        val nextReviewAt = now + (interval.toLong() * ONE_DAY_MS)
+        return item.copy(
+            nextReviewAt = nextReviewAt,
+            lastReviewedAt = now,
+            reviewCount = maxOf(item.reviewCount, 3),
+            intervalDays = interval,
+            easeFactor = maxOf(item.easeFactor, 2.5f),
+            updatedAt = now
+        )
+    }
+
+    /**
+     * Creates a new review item for an annotation with initial schedule.
+     * By default dueImmediately is true so the card is ready to be reviewed today.
      */
     fun createInitialReviewItem(
         id: String,
         annotationId: String,
         bookId: String,
-        now: Long = System.currentTimeMillis()
+        now: Long = System.currentTimeMillis(),
+        dueImmediately: Boolean = true
     ): ReviewItemEntity {
         return ReviewItemEntity(
             id = id,
             annotationId = annotationId,
             bookId = bookId,
             isEnabled = true,
-            nextReviewAt = now + ONE_DAY_MS,
+            nextReviewAt = if (dueImmediately) now else now + ONE_DAY_MS,
             lastReviewedAt = null,
             reviewCount = 0,
             intervalDays = 1,

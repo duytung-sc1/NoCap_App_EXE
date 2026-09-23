@@ -436,6 +436,27 @@ internal object UiTranslations {
         match("Lần ôn: (\\d+)")?.let { m ->
             return "Reviews: ${m.groupValues[1]}"
         }
+        match("Tất cả (\\d+) điểm trích dẫn đã có trong danh sách ôn tập\\.")?.let { m ->
+            return "All ${m.groupValues[1]} highlights are already in the review queue."
+        }
+        match("Ôn tập tất cả thẻ \\((\\d+)\\)")?.let { m ->
+            return "Review all cards (${m.groupValues[1]})"
+        }
+        match("Tất cả \\((\\d+)\\)")?.let { m ->
+            return "All (${m.groupValues[1]})"
+        }
+        match("Cần ôn lại \\((\\d+)\\)")?.let { m ->
+            return "Due (${m.groupValues[1]})"
+        }
+        match("Đang học \\((\\d+)\\)")?.let { m ->
+            return "Learning (${m.groupValues[1]})"
+        }
+        match("Đã nhớ \\((\\d+)\\)")?.let { m ->
+            return "Mastered (${m.groupValues[1]})"
+        }
+        match("(\\d+) / (\\d+) thẻ")?.let { m ->
+            return "${m.groupValues[1]} / ${m.groupValues[2]} cards"
+        }
         match("Đã thêm (\\d+) thẻ mới vào danh sách ôn tập!")?.let { m ->
             return "Added ${m.groupValues[1]} new cards to the review queue!"
         }

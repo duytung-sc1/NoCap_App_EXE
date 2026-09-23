@@ -74,12 +74,23 @@ interface ReviewDao {
     @Query("SELECT annotation_id FROM review_items")
     suspend fun getAllReviewAnnotationIds(): List<String>
 
+    @Transaction
+    @Query("SELECT * FROM review_items WHERE is_enabled = 1 ORDER BY next_review_at ASC")
+    suspend fun getAllReviewItemsWithDetails(): List<ReviewItemWithDetails>
+
+    @Transaction
+    @Query("SELECT * FROM review_items WHERE is_enabled = 1 ORDER BY next_review_at ASC")
+    fun observeAllReviewItemsWithDetails(): Flow<List<ReviewItemWithDetails>>
+
+    @Query("UPDATE review_items SET next_review_at = :now, updated_at = :now WHERE review_count = 0 AND next_review_at > :now AND is_enabled = 1")
+    suspend fun resetUnreviewedItemsToNow(now: Long): Int
+
     @Query("SELECT COUNT(*) FROM review_items WHERE next_review_at <= :now AND is_enabled = 1")
     suspend fun getDueCount(now: Long): Int
 
-    @Query("SELECT COUNT(*) FROM review_items WHERE next_review_at > :now AND is_enabled = 1 AND interval_days < 21")
+    @Query("SELECT COUNT(*) FROM review_items WHERE next_review_at > :now AND is_enabled = 1 AND interval_days < 14")
     suspend fun getLearningCount(now: Long): Int
 
-    @Query("SELECT COUNT(*) FROM review_items WHERE next_review_at > :now AND is_enabled = 1 AND interval_days >= 21")
+    @Query("SELECT COUNT(*) FROM review_items WHERE next_review_at > :now AND is_enabled = 1 AND interval_days >= 14")
     suspend fun getMasteredCount(now: Long): Int
 }

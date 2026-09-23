@@ -27,7 +27,16 @@ class ReviewSchedulerTest {
         assertEquals(0, item.reviewCount)
         assertEquals(1, item.intervalDays)
         assertEquals(2.5f, item.easeFactor, 0.001f)
-        assertEquals(now + ReviewScheduler.ONE_DAY_MS, item.nextReviewAt)
+        assertEquals(now, item.nextReviewAt)
+
+        val delayedItem = ReviewScheduler.createInitialReviewItem(
+            id = "rev_2",
+            annotationId = "hl_2",
+            bookId = "book_2",
+            now = now,
+            dueImmediately = false
+        )
+        assertEquals(now + ReviewScheduler.ONE_DAY_MS, delayedItem.nextReviewAt)
     }
 
     @Test
@@ -190,5 +199,15 @@ class ReviewSchedulerTest {
             createdAt = now, updatedAt = now
         )
         assertEquals(MemoryState.DUE, ReviewScheduler.memoryState(overdueMastered, now))
+    }
+
+    @Test
+    fun `test markAsMastered sets interval to 14 days and status to MASTERED`() {
+        val now = 1_700_000_000_000L
+        val item = ReviewScheduler.createInitialReviewItem("r1", "a1", "b1", now)
+        val mastered = ReviewScheduler.markAsMastered(item, now)
+        assertEquals(ReviewScheduler.MASTERED_INTERVAL_DAYS, mastered.intervalDays)
+        assertTrue(mastered.nextReviewAt > now)
+        assertEquals(MemoryState.MASTERED, ReviewScheduler.memoryState(mastered, now))
     }
 }

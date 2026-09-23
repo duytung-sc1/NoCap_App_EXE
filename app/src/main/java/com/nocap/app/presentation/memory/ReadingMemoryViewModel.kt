@@ -11,6 +11,7 @@ import com.nocap.app.core.database.dao.HighlightDao
 import com.nocap.app.core.database.entity.BookmarkEntity
 import com.nocap.app.core.database.entity.CatalogBookEntity
 import com.nocap.app.core.database.entity.HighlightEntity
+import com.nocap.app.core.database.dao.ReviewItemWithDetails
 import com.nocap.app.data.review.LocalReviewRepository
 import com.nocap.app.data.search.LocalKnowledgeSearchRepository
 import com.nocap.app.data.stats.LocalReadingStatsRepository
@@ -18,12 +19,14 @@ import com.nocap.app.domain.export.KnowledgeExporter
 import com.nocap.app.domain.export.PdfKnowledgeExporter
 import com.nocap.app.domain.model.BookmarkWithBook
 import com.nocap.app.domain.model.HighlightWithBook
+import com.nocap.app.domain.repository.AutoGenResult
 import com.nocap.app.domain.repository.KnowledgeSearchRepository
 import com.nocap.app.domain.repository.MostReadBookItem
 import com.nocap.app.domain.repository.ReadingStatsRepository
 import com.nocap.app.domain.repository.ReadingStatsSummary
 import com.nocap.app.domain.repository.ReviewRepository
 import com.nocap.app.domain.repository.ReviewStatsSummary
+import com.nocap.app.domain.review.ReviewScheduler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -33,17 +36,41 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.OutputStream
 
+enum class MemoryFilter {
+    ALL,
+    DUE,
+    LEARNING,
+    MASTERED
+}
+
 data class ReadingMemoryUiState(
     val isLoading: Boolean = true,
     val statsSummary: ReadingStatsSummary = ReadingStatsSummary(0, 0, 0, 0, 0),
     val dueTodayCount: Int = 0,
     val reviewStats: ReviewStatsSummary = ReviewStatsSummary(0, 0, 0, 0),
+    val allReviewItems: List<ReviewItemWithDetails> = emptyList(),
+    val selectedFilter: MemoryFilter = MemoryFilter.ALL,
     val recentHighlights: List<HighlightWithBook> = emptyList(),
     val recentNotes: List<HighlightWithBook> = emptyList(),
     val recentBookmarks: List<BookmarkWithBook> = emptyList(),
     val mostReadBooks: List<MostReadBookItem> = emptyList(),
     val allBooks: List<CatalogBookEntity> = emptyList()
-)
+) {
+    val filteredReviewItems: List<ReviewItemWithDetails>
+        get() {
+            val now = System.currentTimeMillis()
+            return when (selectedFilter) {
+                MemoryFilter.ALL -> allReviewItems
+                MemoryFilter.DUE -> allReviewItems.filter { it.reviewItem.nextReviewAt <= now }
+                MemoryFilter.LEARNING -> allReviewItems.filter {
+                    it.reviewItem.nextReviewAt > now && it.reviewItem.intervalDays < ReviewScheduler.MASTERED_INTERVAL_DAYS
+                }
+                MemoryFilter.MASTERED -> allReviewItems.filter {
+                    it.reviewItem.nextReviewAt > now && it.reviewItem.intervalDays >= ReviewScheduler.MASTERED_INTERVAL_DAYS
+                }
+            }
+        }
+}
 
 class ReadingMemoryViewModel(
     private val statsRepository: ReadingStatsRepository,
@@ -64,6 +91,11 @@ class ReadingMemoryViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             val now = System.currentTimeMillis()
+
+            // Auto-repair unreviewed items scheduled in future to today
+            withContext(Dispatchers.IO) {
+                reviewRepository.resetUnreviewedItemsToNow(now)
+            }
 
             val stats = withContext(Dispatchers.IO) {
                 statsRepository.getStatsSummary(now)
@@ -90,11 +122,10 @@ class ReadingMemoryViewModel(
                 bookmarkDao.getAllBookmarks()
             }
 
-            // Check which highlights are currently in review queue
-            val reviewItems = withContext(Dispatchers.IO) {
-                reviewRepository.getDueItemsWithDetails(Long.MAX_VALUE)
+            val allRevItems = withContext(Dispatchers.IO) {
+                reviewRepository.getAllReviewItemsWithDetails()
             }
-            val reviewAnnotationIds = reviewItems.filter { it.reviewItem.isEnabled }.map { it.reviewItem.annotationId }.toSet()
+            val reviewAnnotationIds = allRevItems.filter { it.reviewItem.isEnabled }.map { it.reviewItem.annotationId }.toSet()
 
             val recentHls = allHighlights
                 .filter { it.note.isNullOrBlank() }
@@ -140,6 +171,7 @@ class ReadingMemoryViewModel(
                     statsSummary = stats,
                     dueTodayCount = dueCount,
                     reviewStats = revStats,
+                    allReviewItems = allRevItems,
                     recentHighlights = recentHls,
                     recentNotes = recentNotes,
                     recentBookmarks = recentBms,
@@ -150,6 +182,20 @@ class ReadingMemoryViewModel(
         }
     }
 
+    fun setFilter(filter: MemoryFilter) {
+        _uiState.update { it.copy(selectedFilter = filter) }
+    }
+
+    suspend fun autoGenerateReviewDetailed(onlyWithNotes: Boolean = false): Result<AutoGenResult> {
+        val result = withContext(Dispatchers.IO) {
+            reviewRepository.autoGenerateReviewItemsDetailed(null, onlyWithNotes)
+        }
+        if (result.isSuccess) {
+            loadData()
+        }
+        return result
+    }
+
     suspend fun autoGenerateReview(onlyWithNotes: Boolean = false): Result<Int> {
         val result = withContext(Dispatchers.IO) {
             reviewRepository.autoGenerateReviewItems(null, onlyWithNotes)
@@ -158,6 +204,24 @@ class ReadingMemoryViewModel(
             loadData()
         }
         return result
+    }
+
+    fun markItemAsMastered(annotationId: String) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                reviewRepository.markAsMastered(annotationId)
+            }
+            loadData()
+        }
+    }
+
+    fun removeFromReview(annotationId: String) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                reviewRepository.removeFromReview(annotationId)
+            }
+            loadData()
+        }
     }
 
     fun toggleReview(annotationId: String, bookId: String, currentInReview: Boolean) {

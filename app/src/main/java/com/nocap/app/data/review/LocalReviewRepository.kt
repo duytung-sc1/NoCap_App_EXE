@@ -4,6 +4,7 @@ import com.nocap.app.core.database.dao.HighlightDao
 import com.nocap.app.core.database.dao.ReviewDao
 import com.nocap.app.core.database.dao.ReviewItemWithDetails
 import com.nocap.app.core.database.entity.ReviewItemEntity
+import com.nocap.app.domain.repository.AutoGenResult
 import com.nocap.app.domain.repository.ReviewRepository
 import com.nocap.app.domain.repository.ReviewStatsSummary
 import com.nocap.app.domain.review.ReviewRating
@@ -62,7 +63,8 @@ class LocalReviewRepository(
             val newItem = ReviewScheduler.createInitialReviewItem(
                 id = UUID.randomUUID().toString(),
                 annotationId = annotationId,
-                bookId = bookId
+                bookId = bookId,
+                dueImmediately = true
             )
             reviewDao.insertReviewItem(newItem)
             Result.success(newItem)
@@ -110,6 +112,33 @@ class LocalReviewRepository(
         return reviewDao.observeAllReviewItems()
     }
 
+    override suspend fun getAllReviewItemsWithDetails(): List<ReviewItemWithDetails> {
+        val items = reviewDao.getAllReviewItemsWithDetails()
+        val now = System.currentTimeMillis()
+        return items.sortedByDescending { ReviewScheduler.priorityScore(it.reviewItem, now) }
+    }
+
+    override fun observeAllReviewItemsWithDetails(): Flow<List<ReviewItemWithDetails>> {
+        return reviewDao.observeAllReviewItemsWithDetails()
+    }
+
+    override suspend fun resetUnreviewedItemsToNow(now: Long): Int {
+        return reviewDao.resetUnreviewedItemsToNow(now)
+    }
+
+    override suspend fun markAsMastered(annotationId: String): Result<ReviewItemEntity> {
+        return try {
+            val item = reviewDao.getReviewItemByAnnotationId(annotationId)
+                ?: return Result.failure(IllegalArgumentException("Không tìm thấy mục ôn tập"))
+            val now = System.currentTimeMillis()
+            val mastered = ReviewScheduler.markAsMastered(item, now)
+            reviewDao.updateReviewItem(mastered)
+            Result.success(mastered)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     override suspend fun getReviewStats(now: Long): ReviewStatsSummary {
         val due = reviewDao.getDueCount(now)
         val learning = reviewDao.getLearningCount(now)
@@ -122,13 +151,23 @@ class LocalReviewRepository(
         )
     }
 
-    override suspend fun autoGenerateReviewItems(bookId: String?, onlyWithNotes: Boolean): Result<Int> {
+    override suspend fun autoGenerateReviewItemsDetailed(bookId: String?, onlyWithNotes: Boolean): Result<AutoGenResult> {
         return try {
             val dao = highlightDao ?: return Result.failure(IllegalStateException("HighlightDao not provided"))
-            val existingIds = reviewDao.getAllReviewAnnotationIds().toSet()
             val allHighlights = if (bookId != null) dao.getHighlightsForBook(bookId) else dao.getAllHighlights()
+            if (allHighlights.isEmpty()) {
+                return Result.success(AutoGenResult.NoHighlightsAtAll)
+            }
+            if (onlyWithNotes && allHighlights.none { !it.note.isNullOrBlank() }) {
+                return Result.success(AutoGenResult.NoHighlightsWithNotes)
+            }
+            val existingIds = reviewDao.getAllReviewAnnotationIds().toSet()
             val candidates = allHighlights.filter { hl ->
                 !existingIds.contains(hl.id) && (!onlyWithNotes || !hl.note.isNullOrBlank())
+            }
+            if (candidates.isEmpty()) {
+                val totalRelevant = if (onlyWithNotes) allHighlights.count { !it.note.isNullOrBlank() } else allHighlights.size
+                return Result.success(AutoGenResult.AllAlreadyInReview(totalRelevant))
             }
             val now = System.currentTimeMillis()
             val newItems = candidates.map { hl ->
@@ -136,15 +175,21 @@ class LocalReviewRepository(
                     id = UUID.randomUUID().toString(),
                     annotationId = hl.id,
                     bookId = hl.bookId,
-                    now = now
+                    now = now,
+                    dueImmediately = true
                 )
             }
-            if (newItems.isNotEmpty()) {
-                reviewDao.insertReviewItems(newItems)
-            }
-            Result.success(newItems.size)
+            reviewDao.insertReviewItems(newItems)
+            Result.success(AutoGenResult.Added(newItems.size))
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    override suspend fun autoGenerateReviewItems(bookId: String?, onlyWithNotes: Boolean): Result<Int> {
+        return when (val detailed = autoGenerateReviewItemsDetailed(bookId, onlyWithNotes).getOrThrow()) {
+            is AutoGenResult.Added -> Result.success(detailed.count)
+            else -> Result.success(0)
         }
     }
 }
