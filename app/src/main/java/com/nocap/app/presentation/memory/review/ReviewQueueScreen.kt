@@ -159,19 +159,19 @@ fun ReviewQueueScreen(
                                 horizontalArrangement = Arrangement.SpaceEvenly
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text("Chưa nhớ", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                                    Text("Chưa nhớ", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error, maxLines = 1, softWrap = false)
                                     Text("${uiState.againCount}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
                                 }
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text("Khó", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
+                                    Text("Khó", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary, maxLines = 1, softWrap = false)
                                     Text("${uiState.hardCount}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.tertiary)
                                 }
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text("Tốt", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                    Text("Tốt", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, maxLines = 1, softWrap = false)
                                     Text("${uiState.goodCount}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                                 }
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text("Dễ", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                                    Text("Dễ", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary, maxLines = 1, softWrap = false)
                                     Text("${uiState.easyCount}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
                                 }
                             }
@@ -342,40 +342,99 @@ fun ReviewQueueScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        val buttonShape = RoundedCornerShape(20.dp)
+                        val buttonPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+
                         Button(
                             onClick = { viewModel.answerCurrent(ReviewRating.AGAIN) },
                             enabled = !uiState.isSubmitting,
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE57373))
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(44.dp),
+                            shape = buttonShape,
+                            contentPadding = buttonPadding,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFE57373),
+                                contentColor = Color.White
+                            )
                         ) {
-                            Text("Chưa nhớ", fontSize = 12.sp)
+                            Text(
+                                text = "Chưa nhớ",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                softWrap = false,
+                                textAlign = TextAlign.Center
+                            )
                         }
 
                         Button(
                             onClick = { viewModel.answerCurrent(ReviewRating.HARD) },
                             enabled = !uiState.isSubmitting,
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFB74D))
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(44.dp),
+                            shape = buttonShape,
+                            contentPadding = buttonPadding,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFFFB74D),
+                                contentColor = Color.White
+                            )
                         ) {
-                            Text("Khó", fontSize = 12.sp)
+                            Text(
+                                text = "Khó",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                softWrap = false,
+                                textAlign = TextAlign.Center
+                            )
                         }
 
                         Button(
                             onClick = { viewModel.answerCurrent(ReviewRating.GOOD) },
                             enabled = !uiState.isSubmitting,
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF64B5F6))
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(44.dp),
+                            shape = buttonShape,
+                            contentPadding = buttonPadding,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF64B5F6),
+                                contentColor = Color.White
+                            )
                         ) {
-                            Text("Tốt", fontSize = 12.sp)
+                            Text(
+                                text = "Tốt",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                softWrap = false,
+                                textAlign = TextAlign.Center
+                            )
                         }
 
                         Button(
                             onClick = { viewModel.answerCurrent(ReviewRating.EASY) },
                             enabled = !uiState.isSubmitting,
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF81C784))
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(44.dp),
+                            shape = buttonShape,
+                            contentPadding = buttonPadding,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF81C784),
+                                contentColor = Color.White
+                            )
                         ) {
-                            Text("Dễ", fontSize = 12.sp)
+                            Text(
+                                text = "Dễ",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                softWrap = false,
+                                textAlign = TextAlign.Center
+                            )
                         }
                     }
                 }
