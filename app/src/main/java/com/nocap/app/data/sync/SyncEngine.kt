@@ -7,6 +7,7 @@ import android.database.sqlite.SQLiteDatabase
 import androidx.room.withTransaction
 import com.nocap.app.BuildConfig
 import com.nocap.app.core.database.AppDatabase
+import com.nocap.app.core.database.toEntity
 import com.nocap.app.data.auth.CloudAuthRepository
 import com.nocap.app.domain.model.AuthState
 import kotlinx.coroutines.Dispatchers
@@ -178,6 +179,7 @@ class SyncEngine(private val context: Context, private val profile: String) {
     private fun conflict(kind: String,key: String,data: JSONObject,reason: String) {
         db.execSQL("INSERT INTO sync_conflicts(id,kind,local_key,payload,reason) VALUES(?,?,?,?,?)",arrayOf<Any>(UUID.randomUUID().toString(),kind,key,data.toString(),reason))
     }
+    private data class ColInfo(val name: String, val type: String, val notNull: Boolean, val dflt: String?)
     private fun applyChange(change: JSONObject, force: Boolean = false) {
         val kind=change.getString("kind");check(kind in SyncSchema.keys)
         val remoteId=change.getString("id");val payload=change.getJSONObject("payload");val deleted=change.getInt("deleted")==1
@@ -222,30 +224,93 @@ class SyncEngine(private val context: Context, private val profile: String) {
             // A finalized session can arrive after its book was deleted on this device.
             // Retain the orphan payload without blocking the applied feed cursor forever.
             if (payload.has("book_id") && !payload.isNull("book_id")) {
-                val parentKey=localKey("catalog_books",JSONObject().put("id",payload.getString("book_id")))
-                val parentId=UUID.nameUUIDFromBytes("nocap-sync-v1:catalog_books:$parentKey".toByteArray()).toString()
-                val parentDeleted=db.query("SELECT deleted FROM sync_remote_heads WHERE kind='catalog_books' AND remote_id=?",arrayOf<Any>(parentId)).use { it.moveToFirst() && it.getInt(0)==1 }
-                if(parentDeleted) {
-                    conflict(kind,key,payload,"REMOTE_CHILD_AFTER_PARENT_DELETED")
+                val bookId = payload.getString("book_id")
+                val parentKey = localKey("catalog_books", JSONObject().put("id", bookId))
+                val parentId = UUID.nameUUIDFromBytes("nocap-sync-v1:catalog_books:$parentKey".toByteArray()).toString()
+                val parentDeleted = db.query("SELECT deleted FROM sync_remote_heads WHERE kind='catalog_books' AND remote_id=?", arrayOf<Any>(parentId)).use { it.moveToFirst() && it.getInt(0) == 1 }
+                if (parentDeleted) {
+                    conflict(kind, key, payload, "REMOTE_CHILD_AFTER_PARENT_DELETED")
                     rememberRemoteHead(change)
                     return
+                }
+                val bookExists = db.query("SELECT 1 FROM catalog_books WHERE id=?", arrayOf<Any>(bookId)).use { it.moveToFirst() }
+                if (!bookExists) {
+                    val cloudBook = com.nocap.app.data.catalog.CloudCatalog.books.value.find { it.id == bookId }
+                    if (cloudBook != null) {
+                        val cloudCat = com.nocap.app.data.catalog.CloudCatalog.categories.value.find { it.id == cloudBook.categoryId }
+                        if (cloudCat != null) {
+                            db.execSQL("INSERT OR IGNORE INTO categories(id,name,icon_url,display_order) VALUES(?,?,?,?)", arrayOf<Any?>(cloudCat.id, cloudCat.name, cloudCat.iconUrl, cloudCat.displayOrder))
+                        }
+                        val be = cloudBook.toEntity()
+                        db.execSQL(
+                            """INSERT OR IGNORE INTO catalog_books(
+                                id,title,author,description,cover_url,category_id,file_url,file_size_bytes,
+                                content_version,content_hash,is_featured,is_new,is_premium,play_product_id,
+                                entitlement_type,rating,published_date,updated_at,format,media_type,source_type,
+                                source_url,is_in_inbox,inbox_added_at,is_pinned,is_archived,reading_status,
+                                user_title_override,user_author_override,custom_cover_path,last_opened_at,added_at,original_filename
+                            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""".trimIndent(),
+                            arrayOf<Any?>(
+                                be.id, be.title, be.author, be.description, be.coverUrl, be.categoryId,
+                                be.fileUrl, be.fileSizeBytes, be.contentVersion, be.contentHash,
+                                if (be.isFeatured) 1 else 0, if (be.isNew) 1 else 0, if (be.isPremium) 1 else 0,
+                                be.playProductId, be.entitlementType.name, be.rating, be.publishedDate,
+                                be.updatedAt, be.format.name, be.mediaType, be.sourceType.name, be.sourceUrl,
+                                if (be.isInInbox) 1 else 0, be.inboxAddedAt, if (be.isPinned) 1 else 0,
+                                if (be.isArchived) 1 else 0, be.readingStatus.name, be.userTitleOverride,
+                                be.userAuthorOverride, be.customCoverPath, be.lastOpenedAt, be.addedAt, be.originalFilename
+                            )
+                        )
+                    }
                 }
             }
             if(kind=="catalog_books") {
                 check(payload.isNull("custom_cover_path"))
                 check(payload.optString("cover_url").isEmpty() || payload.optString("cover_url").startsWith("https://"))
                 check(Regex("[A-Za-z0-9._-]{1,255}").matches(payload.getString("id")) && !payload.getString("id").contains(".."))
+                if (payload.optString("category_id") == "imported") {
+                    db.execSQL("INSERT OR IGNORE INTO categories(id,name,display_order) VALUES('imported','Sách đã nhập',999)")
+                }
                 // Local cover customization is device-specific and never replaced by a remote path.
                 row(kind,key)?.opt("custom_cover_path")?.let { payload.put("custom_cover_path",it) }
             }
-            val columns=db.query("PRAGMA table_info($kind)").use { c -> buildSet { while(c.moveToNext())add(c.getString(1)) } }
-            check(payload.keys().asSequence().toSet()==columns) { "Cấu trúc bản ghi đồng bộ không tương thích" }
-            val values=ContentValues()
-            for(column in columns)when(val value=payload.get(column)) {
-                JSONObject.NULL -> values.putNull(column)
-                is Number -> if(value is Double || value is Float)values.put(column,value.toDouble()) else values.put(column,value.toLong())
-                is String -> values.put(column,value)
-                else -> error("Giá trị đồng bộ không hợp lệ")
+            val tableColumns = db.query("PRAGMA table_info($kind)").use { c ->
+                buildList {
+                    while (c.moveToNext()) {
+                        add(ColInfo(c.getString(1), c.getString(2) ?: "", c.getInt(3) == 1, c.getString(4)))
+                    }
+                }
+            }
+            val values = ContentValues()
+            for (col in tableColumns) {
+                val column = col.name
+                if (!payload.has(column) || payload.isNull(column)) {
+                    if (col.notNull) {
+                        val type = col.type.uppercase()
+                        when {
+                            type.contains("INT") -> values.put(column, col.dflt?.toLongOrNull() ?: 0L)
+                            type.contains("REAL") || type.contains("FLOA") || type.contains("DOUB") -> values.put(column, col.dflt?.toDoubleOrNull() ?: 0.0)
+                            else -> values.put(column, col.dflt?.trim { it == '\'' || it == '"' } ?: "")
+                        }
+                    } else {
+                        values.putNull(column)
+                    }
+                    continue
+                }
+                when (val value = payload.get(column)) {
+                    JSONObject.NULL -> if (col.notNull) {
+                        val type = col.type.uppercase()
+                        when {
+                            type.contains("INT") -> values.put(column, col.dflt?.toLongOrNull() ?: 0L)
+                            type.contains("REAL") || type.contains("FLOA") || type.contains("DOUB") -> values.put(column, col.dflt?.toDoubleOrNull() ?: 0.0)
+                            else -> values.put(column, col.dflt?.trim { it == '\'' || it == '"' } ?: "")
+                        }
+                    } else values.putNull(column)
+                    is Boolean -> values.put(column, if (value) 1L else 0L)
+                    is Number -> if (value is Double || value is Float) values.put(column, value.toDouble()) else values.put(column, value.toLong())
+                    is String -> values.put(column, value)
+                    else -> values.put(column, value.toString())
+                }
             }
             // UPDATE preserves child rows; REPLACE would cascade-delete annotations.
             if(db.update(kind,SQLiteDatabase.CONFLICT_ABORT,values,"${keyExpression(kind)}=?",arrayOf<Any>(key))==0)db.insert(kind,SQLiteDatabase.CONFLICT_ABORT,values)
@@ -281,6 +346,15 @@ class SyncEngine(private val context: Context, private val profile: String) {
                         }
                     }
                 } while(moved)
+                val stuck = db.query("SELECT seq,payload FROM sync_inbox WHERE applied=0 ORDER BY seq").use { c -> buildList { while(c.moveToNext())add(c.getLong(0) to c.getString(1)) } }
+                for ((seq, text) in stuck) {
+                    val change = JSONObject(text)
+                    val kind = change.optString("kind")
+                    val key = change.optString("id")
+                    conflict(kind, key, change.optJSONObject("payload") ?: JSONObject(), "UNRESOLVABLE_REMOTE_DEPENDENCY")
+                    rememberRemoteHead(change)
+                    db.execSQL("UPDATE sync_inbox SET applied=1 WHERE seq=?", arrayOf<Any>(seq))
+                }
                 // fetch_cursor only acknowledges durable receipt; cursor acknowledges successful apply.
                 db.execSQL("UPDATE sync_control SET fetch_cursor=?,applying=0 WHERE id=1",arrayOf<Any>(page.getLong("cursor")))
                 db.execSQL("UPDATE sync_control SET cursor=MAX(cursor,COALESCE((SELECT MAX(seq) FROM sync_inbox WHERE applied=1 AND seq<COALESCE((SELECT MIN(seq) FROM sync_inbox WHERE applied=0),9223372036854775807)),cursor)) WHERE id=1")
