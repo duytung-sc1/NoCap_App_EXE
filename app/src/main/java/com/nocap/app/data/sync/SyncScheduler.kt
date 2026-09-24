@@ -16,7 +16,8 @@ object SyncScheduler {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val watched = mutableSetOf<String>()
     private val debounce = mutableMapOf<String, Job>()
-    private var foregroundJob: Job? = null
+    @Volatile private var foregroundJob: Job? = null
+    @Volatile private var isForeground = false
     val lock = Mutex()
     @Volatile private var statusProfile = Profiles.LOCAL
 
@@ -28,22 +29,28 @@ object SyncScheduler {
 
     fun now(context: Context, profile: String = Profiles.active.value) {
         if (!profile.startsWith("ACCOUNT:")) return
+        val appContext = context.applicationContext
         val request = OneTimeWorkRequestBuilder<SyncWorker>().setInputData(workDataOf("profile" to profile))
             .setConstraints(constraints()).setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS).build()
-        WorkManager.getInstance(context).enqueueUniqueWork("sync-${Profiles.key(profile)}", ExistingWorkPolicy.APPEND_OR_REPLACE, request)
+        WorkManager.getInstance(appContext).enqueueUniqueWork("sync-${Profiles.key(profile)}", ExistingWorkPolicy.APPEND_OR_REPLACE, request)
     }
 
     fun onForeground(context: Context, profile: String = Profiles.active.value) {
-        if (!profile.startsWith("ACCOUNT:")) return
-        now(context, profile)
+        isForeground = true
+        if (!profile.startsWith("ACCOUNT:")) {
+            onBackground()
+            return
+        }
+        val appContext = context.applicationContext
+        now(appContext, profile)
         synchronized(this) {
             foregroundJob?.cancel()
             foregroundJob = scope.launch {
-                while (isActive) {
+                while (isActive && isForeground) {
                     delay(45_000)
                     val active = Profiles.active.value
-                    if (active.startsWith("ACCOUNT:")) {
-                        now(context.applicationContext, active)
+                    if (active.startsWith("ACCOUNT:") && isForeground) {
+                        now(appContext, active)
                     }
                 }
             }
@@ -51,6 +58,7 @@ object SyncScheduler {
     }
 
     fun onBackground() {
+        isForeground = false
         synchronized(this) {
             foregroundJob?.cancel()
             foregroundJob = null
@@ -68,6 +76,7 @@ object SyncScheduler {
         }
         if (!profile.startsWith("ACCOUNT:")) {
             status.value = "Dữ liệu trên thiết bị; đăng nhập để đồng bộ"
+            onBackground()
             return
         }
         val app = context.applicationContext
@@ -91,7 +100,9 @@ object SyncScheduler {
             .setConstraints(constraints()).setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS).build()
         WorkManager.getInstance(app).enqueueUniquePeriodicWork("periodic-sync-${Profiles.key(profile)}", ExistingPeriodicWorkPolicy.KEEP, periodic)
         now(app, profile)
-        onForeground(app, profile)
+        if (isForeground) {
+            onForeground(app, profile)
+        }
     }
 }
 
