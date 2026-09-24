@@ -57,8 +57,6 @@ fun PlanCard() {
     var paymentLoading by remember { mutableStateOf(false) }
     var paymentMessage by remember { mutableStateOf<String?>(null) }
     var order by remember { mutableStateOf<BankTransferOrder?>(null) }
-    LaunchedEffect(play) { play.connect() }
-
     val pro = state.entitlement?.let {
         it.userId == repo.activeUser() && it.plan == "PRO" &&
             it.status in setOf("ACTIVE", "IN_GRACE_PERIOD", "CANCELED") &&
@@ -66,6 +64,7 @@ fun PlanCard() {
     } == true
     val purchaseAvailable = com.nocap.app.BuildConfig.PLAY_PRO_PRODUCT_ID.isNotBlank() &&
         state.entitlement?.let { it.userId == repo.activeUser() && it.configured } == true
+    LaunchedEffect(play, purchaseAvailable) { if (purchaseAvailable) play.connect() }
 
     LaunchedEffect(order?.id) {
         var current = order ?: return@LaunchedEffect
@@ -168,12 +167,12 @@ fun PlanCard() {
                     modifier = Modifier.weight(1f).heightIn(min = 48.dp)
                 ) { Text("Nâng cấp Pro") }
 
-                if (repo.activeUser() != null) OutlinedButton(
+                if (purchaseAvailable) OutlinedButton(
                     enabled = !state.loading,
                     onClick = { play.restore() },
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.weight(1f).heightIn(min = 48.dp)
-                ) { Text("Khôi phục giao dịch") }
+                ) { Text("Khôi phục quyền mua Google Play") }
             }
 
             TextButton(onClick = { scope.launch { repo.refresh() } }, modifier = Modifier.align(Alignment.CenterHorizontally)) {

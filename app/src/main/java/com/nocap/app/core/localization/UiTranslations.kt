@@ -164,6 +164,14 @@ internal object UiTranslations {
         e("Gửi lại link", "Resend link"),
         e("Đồng bộ nhiều thiết bị", "Multi-device sync"),
         e("Đồng bộ ngay", "Sync now"),
+        e("Tự động đồng bộ đa thiết bị", "Automatic sync across devices"),
+        e("Tự động đồng bộ • Sẵn sàng", "Auto sync • Ready"),
+        e("Tự động đồng bộ • Đã cập nhật mới nhất", "Auto sync • Up to date"),
+        e("Tự động đồng bộ • Đã lưu tiến độ (đang trong phiên đọc)", "Auto sync • Reading progress saved (session in progress)"),
+        e("Dữ liệu trên thiết bị; đăng nhập để đồng bộ", "Data is on this device; sign in to sync"),
+        e("Đang đồng bộ…", "Syncing…"),
+        e("Một số thay đổi chưa hợp nhất được. Các phiên bản vẫn được giữ; hãy thử đồng bộ lại sau.", "Some changes could not be merged. Both versions are saved; try syncing again later."),
+        e("Chưa đồng bộ được. Kiểm tra kết nối rồi thử lại. Dữ liệu trên máy vẫn được giữ.", "Could not sync. Check your connection and try again. Data on this device is safe."),
         e("Đã đồng bộ", "Synced"),
         e("Đang đồng bộ", "Syncing"),
         e("Không có mạng", "Offline"),
@@ -185,6 +193,8 @@ internal object UiTranslations {
         e("Thanh toán thành công", "Payment successful"),
         e("Thanh toán nâng cấp Pro", "Pro upgrade payment"),
         e("Mã QR thanh toán Pro", "Pro payment QR code"),
+        e("Không tải được mã QR", "Unable to load the QR code"),
+        e("Thời gian còn lại", "Time remaining"),
         e("Quét mã QR để thanh toán", "Scan the QR code to pay"),
         e("Gói Pro đã được kích hoạt cho tài khoản này.", "Pro has been activated for this account."),
         e("Quét QR hoặc dùng thông tin bên dưới. Chuyển đúng số tiền và nội dung để hệ thống tự xác nhận.", "Scan the QR code or use the details below. Transfer the exact amount and memo for automatic confirmation."),
@@ -198,7 +208,11 @@ internal object UiTranslations {
         e("Chọn ứng dụng ngân hàng", "Choose a bank app"),
         e("Tự điền", "Auto-fill"),
         e("Khôi phục giao dịch", "Restore purchases"),
+        e("Khôi phục quyền mua Google Play", "Restore Google Play purchases"),
+        e("Google Play chưa được bật; hãy cập nhật trạng thái gói để kiểm tra giao dịch ngân hàng.", "Google Play purchases are unavailable. Refresh plan status to check a bank transfer."),
         e("Thanh toán đang chờ xác nhận", "Purchase pending"),
+        e("Kỳ hiện tại đến", "Current period ends"),
+        e("Hạn sử dụng", "Expires"),
         e("Cập nhật trạng thái gói", "Refresh plan status"),
         e("Bộ nhớ đọc", "Reading Memory"),
         e("Trở lại những điều bạn muốn nhớ", "Return to what you want to remember"),
@@ -321,6 +335,7 @@ internal object UiTranslations {
         e("Đăng nhập tài khoản để tự động đồng bộ tiến độ đọc và sao lưu thư viện giữa các thiết bị.", "Sign in to automatically sync reading progress and back up your library across devices."),
         e("Sao lưu & Khôi phục", "Backup & Restore"),
         e("Lưu trữ toàn bộ sách, ghi chú, tiến độ đọc và bộ sưu tập lên tài khoản.", "Save all books, notes, reading progress, and collections to your account."),
+        e("Xóa toàn bộ bản sao lưu trên đám mây", "Delete all cloud backups"),
         e("Xóa bản sao lưu trên đám mây", "Delete cloud backup"),
         e("Gói hiện tại: Pro", "Current plan: Pro"),
         e("Gói hiện tại: Free", "Current plan: Free"),
@@ -345,6 +360,13 @@ internal object UiTranslations {
 
     private fun translateTemplate(source: String, language: AppLanguage): String? {
         fun match(pattern: String) = Regex(pattern).matchEntire(source)
+        match("Còn (\\d+) thay đổi đang chờ tự động gửi\\.")?.let { m ->
+            return "${m.groupValues[1]} changes are waiting to sync automatically."
+        }
+        match("(Kỳ hiện tại đến|Hạn sử dụng): (.+)")?.let { m ->
+            val label = byVietnamese[m.groupValues[1]]?.forLanguage(language) ?: m.groupValues[1]
+            return "$label: ${m.groupValues[2]}"
+        }
         match("(\\d+) tài liệu")?.let { m ->
             val n = m.groupValues[1]
             return "$n documents"

@@ -32,6 +32,7 @@ class PlayBilling(context: Context) : PurchasesUpdatedListener {
         }
     } }
     fun connect(){
+        if(BuildConfig.PLAY_PRO_PRODUCT_ID.isBlank())return
         if(client.isReady){restore();return}
         if(connecting)return
         connecting=true
@@ -41,6 +42,7 @@ class PlayBilling(context: Context) : PurchasesUpdatedListener {
         })
     }
     fun restore(){
+        if(BuildConfig.PLAY_PRO_PRODUCT_ID.isBlank()){message.value="Google Play chưa được bật; hãy cập nhật trạng thái gói để kiểm tra giao dịch ngân hàng.";return}
         if(repository.activeUser()==null){message.value="Đăng nhập để khôi phục giao dịch";return}
         if(!client.isReady){connect();return}
         message.value="Đang khôi phục giao dịch…"

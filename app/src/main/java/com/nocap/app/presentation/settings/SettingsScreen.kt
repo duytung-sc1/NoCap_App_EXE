@@ -596,7 +596,7 @@ fun SettingsScreen(
                                 )
                             }
                             Button(
-                                onClick = { com.nocap.app.data.sync.SyncScheduler.now(syncContext) },
+                                onClick = { com.nocap.app.data.sync.SyncScheduler.now(syncContext, force = true) },
                                 shape = RoundedCornerShape(10.dp),
                                 modifier = Modifier.heightIn(min = 48.dp)
                             ) {

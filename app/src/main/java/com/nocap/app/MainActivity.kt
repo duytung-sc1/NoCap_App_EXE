@@ -43,11 +43,6 @@ class MainActivity : FragmentActivity() {
         setContent {
             val auth by com.nocap.app.data.auth.CloudAuthRepository.getInstance(this).authState.collectAsStateWithLifecycle()
             val profile by com.nocap.app.data.sync.Profiles.active.collectAsStateWithLifecycle()
-            androidx.compose.runtime.LaunchedEffect(profile, auth) {
-                if (auth != com.nocap.app.domain.model.AuthState.Loading) {
-                    com.nocap.app.data.sync.SyncScheduler.start(this@MainActivity, profile)
-                }
-            }
             EbookAppTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     val sharedSource by pendingSharedSource.collectAsStateWithLifecycle()

@@ -104,4 +104,27 @@ class AppLanguageUnitTest {
             UiTranslations.translate("Đang chuẩn bị và tải bản sao lưu…", AppLanguage.ENGLISH)
         )
     }
+
+    @Test
+    fun settingsSyncAndPlanStatusesSwitchCleanlyBetweenEnglishAndVietnamese() {
+        val labels = mapOf(
+            "Tự động đồng bộ đa thiết bị" to "Automatic sync across devices",
+            "Tự động đồng bộ • Sẵn sàng" to "Auto sync • Ready",
+            "Tự động đồng bộ • Đã cập nhật mới nhất" to "Auto sync • Up to date",
+            "Một số thay đổi chưa hợp nhất được. Các phiên bản vẫn được giữ; hãy thử đồng bộ lại sau." to
+                "Some changes could not be merged. Both versions are saved; try syncing again later.",
+            "Khôi phục quyền mua Google Play" to "Restore Google Play purchases"
+        )
+        repeat(2) {
+            for ((vi, en) in labels) {
+                assertEquals(en, UiTranslations.translate(vi, AppLanguage.ENGLISH))
+                assertEquals(vi, UiTranslations.translate(vi, AppLanguage.VIETNAMESE))
+            }
+            assertEquals("3 changes are waiting to sync automatically.",
+                UiTranslations.translate("Còn 3 thay đổi đang chờ tự động gửi.", AppLanguage.ENGLISH))
+            assertEquals("Còn 3 thay đổi đang chờ tự động gửi.",
+                UiTranslations.translate("Còn 3 thay đổi đang chờ tự động gửi.", AppLanguage.VIETNAMESE))
+            assertEquals("Expires: Oct 1, 2026", UiTranslations.translate("Hạn sử dụng: Oct 1, 2026", AppLanguage.ENGLISH))
+        }
+    }
 }
