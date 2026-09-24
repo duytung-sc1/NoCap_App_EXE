@@ -24,7 +24,6 @@ class MainActivity : FragmentActivity() {
         super.attachBaseContext(AppLanguageManager.wrap(newBase))
     }
 
-
     private val pendingSharedSource = MutableStateFlow<PublicationSource?>(null)
     var volumeKeyListener: ((Int) -> Boolean)? = null
 
@@ -55,14 +54,14 @@ class MainActivity : FragmentActivity() {
                     if (auth == com.nocap.app.domain.model.AuthState.Loading) {
                         androidx.compose.material3.CircularProgressIndicator()
                     } else androidx.compose.runtime.key(profile) {
-                    AppNavHost(
-                        pendingImportSource = sharedSource,
-                        onClearPendingImport = {
-                            pendingSharedSource.value = null
-                            sharedImportHandled = true
-                            intent?.markSharedImportHandled()
-                        }
-                    )
+                        AppNavHost(
+                            pendingImportSource = sharedSource,
+                            onClearPendingImport = {
+                                pendingSharedSource.value = null
+                                sharedImportHandled = true
+                                intent?.markSharedImportHandled()
+                            }
+                        )
                     }
                 }
             }
@@ -83,7 +82,12 @@ class MainActivity : FragmentActivity() {
     override fun onStart() {
         super.onStart()
         com.nocap.app.data.billing.PlayBilling.get(this).connect()
-        com.nocap.app.data.sync.SyncScheduler.now(this)
+        com.nocap.app.data.sync.SyncScheduler.onForeground(this)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        com.nocap.app.data.sync.SyncScheduler.onBackground()
     }
 
     private fun handleIntent(intent: Intent?) {

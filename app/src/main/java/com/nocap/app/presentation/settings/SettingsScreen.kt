@@ -585,7 +585,7 @@ fun SettingsScreen(
                         ) {
                             Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                                 Text(
-                                    text = "Đồng bộ nhiều thiết bị",
+                                    text = "Tự động đồng bộ đa thiết bị",
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.SemiBold
                                 )
