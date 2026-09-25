@@ -399,8 +399,13 @@ class CloudBackupRepository(private val context: Context) {
             }
             committed = true; dbFile.delete()
             data.optJSONObject("preferences")?.let { CloudPreferences(context).restore(it) }
-            database.invalidationTracker.refreshVersionsAsync()
             cleanupStaleRestoreDirectories(database, profileFiles)
+            runCatching {
+                withTimeoutOrNull(15000L) {
+                    SyncEngine(context, profile).run()
+                }
+            }
+            database.invalidationTracker.refreshVersionsAsync()
             SyncScheduler.now(context, profile)
             "Đã khôi phục thư viện. Dữ liệu trên thiết bị đã được cập nhật."
         } finally { zipFile.delete(); if (!committed) { staging.deleteRecursively(); restoredFonts.forEach { it.delete() } } }
