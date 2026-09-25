@@ -8,6 +8,7 @@ import androidx.room.withTransaction
 import com.nocap.app.BuildConfig
 import com.nocap.app.core.database.AppDatabase
 import com.nocap.app.core.database.toEntity
+import com.nocap.app.core.datastore.DevicePreferencesDataStore
 import com.nocap.app.data.auth.CloudAuthRepository
 import com.nocap.app.domain.model.AuthState
 import kotlinx.coroutines.Dispatchers
@@ -29,15 +30,8 @@ import java.util.concurrent.TimeUnit
 class SyncEngine(private val context: Context, private val profile: String) {
     private val room = AppDatabase.getInstance(context, profile)
     private val db get() = room.openHelper.writableDatabase
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
-        .callTimeout(45, TimeUnit.SECONDS)
-        .retryOnConnectionFailure(true)
-        .connectionPool(okhttp3.ConnectionPool(5, 5, TimeUnit.MINUTES))
-        .build()
     private lateinit var token: String
+    private lateinit var installationId: String
 
     private suspend fun authenticate() {
         check(profile.startsWith("ACCOUNT:")) { "Vui lòng đăng nhập để đồng bộ" }
@@ -46,13 +40,14 @@ class SyncEngine(private val context: Context, private val profile: String) {
         val user = when(state) { is AuthState.Authenticated -> state.user; is AuthState.RequiresEmailVerification -> state.user; else -> null }
         check(user != null && profile == "ACCOUNT:${user.uid}" && Profiles.active.value == profile) { "Tài khoản đã thay đổi" }
         token = auth.getIdToken(false) ?: error("Phiên đăng nhập hết hạn")
+        installationId = DevicePreferencesDataStore(context).getOrCreateInstallationId()
         // Verify the captured token against the server before sending any private data.
         val me = callAbsolute("${BuildConfig.BACKEND_BASE_URL}/api/v1/me").use { JSONObject(it.body!!.string()) }
         check("ACCOUNT:${me.getString("id")}" == profile) { "Phiên đăng nhập không khớp profile" }
     }
 
     private fun callAbsolute(url: String, method: String = "GET", body: RequestBody? = null): okhttp3.Response {
-        val response = client.newCall(Request.Builder().url(url).header("Authorization", "Bearer $token").method(method,body).build()).execute()
+        val response = client.newCall(Request.Builder().url(url).header("Authorization", "Bearer $token").header("X-NoCap-Device", installationId).method(method,body).build()).execute()
         if (!response.isSuccessful) { val code=response.code; val pro=code==403 && response.body?.string()?.contains("PRO_REQUIRED")==true;response.close();if(pro)throw com.nocap.app.data.billing.ProRequired();error("Đồng bộ thất bại (HTTP $code)") }
         return response
     }
@@ -370,9 +365,11 @@ class SyncEngine(private val context: Context, private val profile: String) {
         var batches=0
         while(true) {
             val operations=pending();if(operations.length()==0)break
+            // Private content must exist before another device is notified about
+            // metadata that references it. A failed push can safely reuse the blob.
+            uploadBlobs()
             val result=call("push","POST",jsonBody(JSONObject().put("operations",operations))).use { JSONObject(it.body!!.string()) }
-            // Upload is retryable even if the push response was lost. Keep pending receipts until blobs finish.
-            uploadBlobs();acknowledge(result.getJSONArray("receipts"))
+            acknowledge(result.getJSONArray("receipts"))
             if(++batches>=100)break
         }
         uploadBlobs();pull()
@@ -387,5 +384,18 @@ class SyncEngine(private val context: Context, private val profile: String) {
         // authenticates and authorizes every account, so an entitlement refresh here
         // only adds two network round trips and can block an otherwise valid restore.
         pull()
+    }
+
+    private companion object {
+        // Realtime sync can run many short cycles. Reuse one pool instead of keeping
+        // a new pool alive for five minutes after every cycle.
+        val client: OkHttpClient = OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .callTimeout(45, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .connectionPool(okhttp3.ConnectionPool(5, 5, TimeUnit.MINUTES))
+            .build()
     }
 }

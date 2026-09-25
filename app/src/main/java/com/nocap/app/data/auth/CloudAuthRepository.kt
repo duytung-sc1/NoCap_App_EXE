@@ -108,6 +108,11 @@ class CloudAuthRepository private constructor(context: Context) : AuthRepository
     override suspend fun deleteAccount(): Result<Unit> = serialized { runCatching { request("/api/v1/me", "DELETE"); clear() } }
     override fun continueAsGuest() { CoroutineScope(Dispatchers.IO).launch { runCatching { signOut() } } }
     override suspend fun getIdToken(forceRefresh: Boolean): String? = authMutex.withLock { token }
+    /** Clears only the session that produced an authentication failure.
+     * A delayed callback from an older socket must not sign out a newer login. */
+    internal suspend fun invalidateSession(expectedToken: String) = serialized {
+        if (token == expectedToken) clear()
+    }
     companion object {
         @Volatile private var instance: CloudAuthRepository? = null
         fun getInstance(context: Context): CloudAuthRepository = instance ?: synchronized(this) { instance ?: CloudAuthRepository(context.applicationContext).also { instance = it } }
