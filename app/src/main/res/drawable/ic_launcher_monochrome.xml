@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The launcher tints the supplied alpha silhouette for themed icons. -->
-<inset xmlns:android="http://schemas.android.com/apk/res/android" android:inset="20%">
-    <bitmap android:src="@drawable/nocap_monochrome" android:gravity="fill" android:filter="true" />
+<!-- The launcher tints this alpha silhouette for themed icons. -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android" android:inset="8%">
+    <bitmap
+        android:src="@drawable/nocap_monochrome"
+        android:gravity="fill"
+        android:filter="true" />
 </inset>
