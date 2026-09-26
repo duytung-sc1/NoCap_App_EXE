@@ -77,6 +77,7 @@ class BookDownloadWorker(
             if (fileUrl.isBlank()) {
                 throw IllegalArgumentException("Sách chưa có liên kết tải")
             }
+            DownloadIntegrity.verifyDeclaredSize(expectedSize)
 
             // 2. Execute streaming request
             val request = if (fileUrl.startsWith("nocap-private:")) {
@@ -94,6 +95,7 @@ class BookDownloadWorker(
 
             val body = received.body ?: throw IllegalStateException("Máy chủ trả về nội dung trống")
             val contentLength = body.contentLength()
+            DownloadIntegrity.verifyDeclaredSize(contentLength)
             val totalBytes = if (contentLength > 0) contentLength else expectedSize
 
             val digest = MessageDigest.getInstance("SHA-256")
@@ -118,9 +120,10 @@ class BookDownloadWorker(
                             return@withContext Result.failure()
                         }
 
+                        downloadedBytes += bytesRead
+                        DownloadIntegrity.verifyProgress(downloadedBytes)
                         outputStream.write(buffer, 0, bytesRead)
                         digest.update(buffer, 0, bytesRead)
-                        downloadedBytes += bytesRead
 
                         val currentTime = System.currentTimeMillis()
                         if (totalBytes > 0 && (currentTime - lastProgressUpdateTime > 500 || downloadedBytes == totalBytes)) {

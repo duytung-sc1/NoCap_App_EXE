@@ -71,6 +71,25 @@ internal object CloudArchive {
         require(file.path.startsWith(root.canonicalPath+File.separator)) { "Đường dẫn sao lưu không hợp lệ" }
         return file
     }
+
+    /** Resolves only files extracted into this restore directory. The original absolute
+     * path from a backup is never reused because it can belong to another local profile. */
+    fun findExtractedFile(root: File, restoredPath: String, fallbackDirectories: List<String>): String? {
+        val canonicalRoot = root.canonicalFile
+        val restored = File(restoredPath).canonicalFile
+        require(restored.path.startsWith(canonicalRoot.path + File.separator)) {
+            "Đường dẫn tài liệu nằm ngoài bản sao lưu"
+        }
+        if (restored.isFile) return restored.path
+        val name = restored.name
+        for (directory in fallbackDirectories) {
+            val relative = if (directory.isBlank()) name else "$directory/$name"
+            val candidate = target(canonicalRoot, relative)
+            if (candidate.isFile) return candidate.path
+        }
+        return null
+    }
+
     fun extract(zipFile: File, root: File, maxBytes: Long = 4L*1024*1024*1024) {
         var expanded=0L
         val names=mutableSetOf<String>()

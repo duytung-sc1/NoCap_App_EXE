@@ -74,5 +74,28 @@ class CloudArchiveTest {
             root.deleteRecursively()
         }
     }
+
+    @Test fun extractedFileResolutionNeverFallsBackToAnotherProfile() {
+        val parent = Files.createTempDirectory("restore-file-resolution").toFile()
+        try {
+            val root = File(parent, "staging/files").apply { mkdirs() }
+            val otherProfile = File(parent, "profiles/account-b/private.epub").apply {
+                parentFile!!.mkdirs(); writeText("private")
+            }
+            assertThrows(IllegalArgumentException::class.java) {
+                CloudArchive.findExtractedFile(root, otherProfile.path, listOf("", "books"))
+            }
+
+            val expected = File(root, "books/restored.epub").apply {
+                parentFile!!.mkdirs(); writeText("restored")
+            }
+            val oldLayout = File(root, "legacy/restored.epub")
+            assertEquals(expected.canonicalPath,
+                CloudArchive.findExtractedFile(root, oldLayout.path, listOf("", "books")))
+            assertNull(CloudArchive.findExtractedFile(root, File(root, "missing.epub").path, listOf("", "books")))
+        } finally {
+            parent.deleteRecursively()
+        }
+    }
 }
 

@@ -21,6 +21,19 @@ class ReaderDownloadRegressionTest {
         DownloadIntegrity.verifySize(3, 3)
         DownloadIntegrity.verifySize(3, -1)
     }
+    @Test fun oversizedDeclaredAndStreamingDownloadsAreRejected() {
+        val tooLarge = DownloadIntegrity.MAX_DOWNLOAD_BYTES + 1
+        for (operation in listOf<() -> Unit>(
+            { DownloadIntegrity.verifyDeclaredSize(tooLarge) },
+            { DownloadIntegrity.verifyProgress(tooLarge) },
+            { DownloadIntegrity.verifySize(tooLarge, -1) }
+        )) {
+            try { operation(); fail("Oversized download accepted") }
+            catch (_: IllegalStateException) { }
+        }
+        DownloadIntegrity.verifyDeclaredSize(-1)
+        DownloadIntegrity.verifyProgress(DownloadIntegrity.MAX_DOWNLOAD_BYTES)
+    }
     @Test fun cacheSeparatesProfilesEntriesAndContentRevisions() {
         val first = temp.newFile("profile-a.cbz").apply { writeText("first") }
         val other = temp.newFile("profile-b.cbz").apply { writeText("first") }

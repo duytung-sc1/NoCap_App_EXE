@@ -18,13 +18,17 @@ class EntitlementTest {
 
     @Test fun `Free and expired plans keep all base features available including sync and cloud`(){
         val baseFeatures = Feature.entries.filter { it !in setOf(Feature.ADVANCED_READING_MEMORY, Feature.KNOWLEDGE_EXPORT, Feature.ADVANCED_CLOUD) }
-        for(feature in baseFeatures) for(state in listOf(null,Entitlement("a"),pro().copy(status="EXPIRED",expiresAt=now-1)))
-            assertTrue(feature.name,EntitlementPolicy.allows(feature,state,"a",now))
+        for(feature in baseFeatures) {
+            assertFalse(feature.name, EntitlementPolicy.requiresServerEntitlement(feature))
+            for(state in listOf(null,Entitlement("a"),pro().copy(status="EXPIRED",expiresAt=now-1)))
+                assertTrue(feature.name,EntitlementPolicy.allows(feature,state,"a",now))
+        }
     }
 
     @Test fun `New Pro features require active Pro entitlement`(){
         val proFeatures = listOf(Feature.ADVANCED_READING_MEMORY, Feature.KNOWLEDGE_EXPORT, Feature.ADVANCED_CLOUD)
         for(feature in proFeatures) {
+            assertTrue(feature.name, EntitlementPolicy.requiresServerEntitlement(feature))
             // Free or expired -> false
             for(state in listOf(null, Entitlement("a"), pro().copy(status="EXPIRED", expiresAt=now-1))) {
                 assertFalse(feature.name, EntitlementPolicy.allows(feature, state, "a", now))

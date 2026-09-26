@@ -62,6 +62,9 @@ class EntitlementRepository private constructor(private val context: Context) {
     suspend fun require(feature: Feature, profile: String): Entitlement {
         val id=profile.removePrefix("ACCOUNT:")
         if(profile!=Profiles.active.value || activeUser()!=id)throw ProRequired()
+        // Base cloud features are part of the Free plan. They must keep working when
+        // Google Play verification or the entitlement endpoint is temporarily down.
+        if(!EntitlementPolicy.requiresServerEntitlement(feature)) return cached(id) ?: Entitlement(id)
         val fresh=refresh().getOrThrow()
         if(!EntitlementPolicy.allows(feature,fresh,id))throw ProRequired()
         return fresh

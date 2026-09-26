@@ -99,6 +99,9 @@ object SyncScheduler {
                         }
                     }
                 }
+            } else {
+                // Logout/profile switches must not leave the previous account's socket alive.
+                RealtimeSyncClient.stop()
             }
         }
     }

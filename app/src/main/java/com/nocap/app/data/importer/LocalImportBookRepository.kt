@@ -343,14 +343,18 @@ class LocalImportBookRepository(
         runCatching {
             val download = downloadDao.getDownloadByBookId(bookId)
             if (download != null && download.localFilePath.isNotBlank()) {
-                runCatching { ManagedDocumentFiles.delete(profileFiles, download.localFilePath) }
+                // Keep database metadata when the managed file cannot be removed. This
+                // prevents a false-success result and protects files owned by another profile.
+                ManagedDocumentFiles.delete(profileFiles, download.localFilePath)
             }
 
-            bookmarkDao.deleteBookmarksByBookId(bookId)
-            progressDao.deleteProgress(bookId)
-            favoriteDao.removeFavorite(bookId)
-            downloadDao.deleteDownload(bookId)
-            catalogDao.deleteBook(bookId)
+            currentDatabase.withTransaction {
+                bookmarkDao.deleteBookmarksByBookId(bookId)
+                progressDao.deleteProgress(bookId)
+                favoriteDao.removeFavorite(bookId)
+                downloadDao.deleteDownload(bookId)
+                catalogDao.deleteBook(bookId)
+            }
 
             Unit
         }

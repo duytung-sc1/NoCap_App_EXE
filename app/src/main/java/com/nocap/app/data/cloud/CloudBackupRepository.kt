@@ -333,17 +333,7 @@ class CloudBackupRepository(private val context: Context) {
                                 is Long -> content.put(column, value)
                                 is Number -> content.put(column, value.toDouble())
                                 is String -> {
-                                    var restored: String? = try {
-                                        CloudArchive.restoredPath(table, column, value, oldRoot, File(newRoot))
-                                    } catch (e: Exception) {
-                                        if (table == "downloaded_books" && column == "local_file_path") {
-                                            if (value.isNotBlank() && File(value).exists()) value else ""
-                                        } else if (table == "catalog_books" && column == "custom_cover_path") {
-                                            if (value.isNotBlank() && File(value).exists()) value else null
-                                        } else {
-                                            throw e
-                                        }
-                                    }
+                                    var restored: String? = CloudArchive.restoredPath(table, column, value, oldRoot, File(newRoot))
                                     if (table == "catalog_books" && column == "id") {
                                         require(com.nocap.app.core.util.DocumentIds.isSafe(value)) { "Mã tài liệu không hợp lệ" }
                                     }
@@ -354,34 +344,14 @@ class CloudBackupRepository(private val context: Context) {
                                         source.copyTo(target); restoredFonts.add(target); restored = target.name
                                     }
                                     if (table == "downloaded_books" && column == "local_file_path" && !restored.isNullOrEmpty()) {
-                                        val f = File(restored)
-                                        if (!f.exists()) {
-                                            val rootDir = File(newRoot)
-                                            val direct = File(rootDir, f.name)
-                                            val imported = File(rootDir, "imported/${f.name}")
-                                            val books = File(rootDir, "books/${f.name}")
-                                            restored = when {
-                                                direct.exists() -> direct.absolutePath
-                                                imported.exists() -> imported.absolutePath
-                                                books.exists() -> books.absolutePath
-                                                value.isNotEmpty() && File(value).exists() -> value
-                                                else -> ""
-                                            }
-                                        }
+                                        restored = CloudArchive.findExtractedFile(
+                                            File(newRoot), restored, listOf("", "imported", "books")
+                                        ) ?: ""
                                     }
                                     if (table == "catalog_books" && column == "custom_cover_path" && !restored.isNullOrEmpty()) {
-                                        val f = File(restored)
-                                        if (!f.exists()) {
-                                            val rootDir = File(newRoot)
-                                            val direct = File(rootDir, f.name)
-                                            val covers = File(rootDir, "covers/${f.name}")
-                                            restored = when {
-                                                direct.exists() -> direct.absolutePath
-                                                covers.exists() -> covers.absolutePath
-                                                value.isNotEmpty() && File(value).exists() -> value
-                                                else -> null
-                                            }
-                                        }
+                                        restored = CloudArchive.findExtractedFile(
+                                            File(newRoot), restored, listOf("", "covers")
+                                        )
                                     }
                                     if (restored != null) {
                                         content.put(column, restored)

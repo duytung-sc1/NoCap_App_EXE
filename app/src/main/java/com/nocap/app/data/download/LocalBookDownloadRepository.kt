@@ -146,7 +146,8 @@ class LocalBookDownloadRepository(
         val existing = downloadDao.getDownloadByBookId(bookId)
         val path = existing?.localFilePath?.takeIf { it.isNotBlank() }
         if (path != null) {
-            runCatching { com.nocap.app.data.importer.ManagedDocumentFiles.delete(profileFiles, path) }
+            // Do not report success or discard metadata when deletion is unsafe/fails.
+            com.nocap.app.data.importer.ManagedDocumentFiles.delete(profileFiles, path)
         }
         cancelDownload(bookId)
         downloadDao.deleteDownload(bookId)

@@ -26,8 +26,9 @@ object EntitlementPolicy {
         Feature.KNOWLEDGE_EXPORT,
         Feature.ADVANCED_CLOUD
     )
+    fun requiresServerEntitlement(feature: Feature): Boolean = feature in proFeatures
     fun allows(feature: Feature, state: Entitlement?, userId: String?, now: Long = System.currentTimeMillis()): Boolean {
-        if (feature !in proFeatures) return true
+        if (!requiresServerEntitlement(feature)) return true
         return state != null && userId != null && state.userId == userId && state.plan == "PRO" &&
             state.status in setOf("ACTIVE", "IN_GRACE_PERIOD", "CANCELED") && state.expiresAt > now &&
             state.updatedAt <= now + 300_000 && now - state.updatedAt <= 24 * 60 * 60 * 1000L
