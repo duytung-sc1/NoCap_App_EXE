@@ -1,9 +1,19 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
 }
+
+val releaseKeystoreFile = rootProject.file("keystore.properties")
+val releaseKeystore = Properties().apply {
+    if (releaseKeystoreFile.isFile) {
+        releaseKeystoreFile.inputStream().use(::load)
+    }
+}
+val hasReleaseSigning = releaseKeystoreFile.isFile
 
 android {
     namespace = "com.nocap.app"
@@ -24,12 +34,26 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(requireNotNull(releaseKeystore.getProperty("storeFile")))
+                storePassword = requireNotNull(releaseKeystore.getProperty("storePassword"))
+                keyAlias = requireNotNull(releaseKeystore.getProperty("keyAlias"))
+                keyPassword = requireNotNull(releaseKeystore.getProperty("keyPassword"))
+            }
+        }
+    }
+
     buildTypes {
         debug {
             buildConfigField("String", "BACKEND_BASE_URL", "\"https://nocap-ebook-api-qa.buiminhhien001.workers.dev\"")
         }
         release {
             isMinifyEnabled = false
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -68,6 +92,14 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
             excludes += "/META-INF/INDEX.LIST"
             excludes += "/META-INF/io.netty.versions.properties"
+        }
+    }
+}
+
+tasks.matching { it.name == "preReleaseBuild" }.configureEach {
+    doFirst {
+        check(hasReleaseSigning) {
+            "Missing keystore.properties. A production release must use the permanent NoCap signing key."
         }
     }
 }
