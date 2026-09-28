@@ -21,7 +21,7 @@ class AuthenticatedHttpClient(
         jsonBody: String? = null
     ): Response = withContext(Dispatchers.IO) {
         var token = tokenProvider.getIdToken(forceRefresh = false)
-            ?: throw IllegalStateException("Ngu?i d�ng chua du?c x�c th?c")
+            ?: throw IllegalStateException("Người dùng chưa được xác thực")
 
         val body = jsonBody?.toRequestBody(mediaType)
             ?: if (method in listOf("POST", "PUT", "PATCH")) "".toRequestBody(mediaType) else null

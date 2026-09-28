@@ -23,8 +23,8 @@ android {
         applicationId = "com.nocap.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
         buildConfigField("String", "BACKEND_BASE_URL", "\"https://nocap-ebook-api.buiminhhien001.workers.dev\"")
         resValue("string", "default_web_client_id", "847491126060-3dikoskpsf80ibrnf799tivmpe8vj2bn.apps.googleusercontent.com")
 

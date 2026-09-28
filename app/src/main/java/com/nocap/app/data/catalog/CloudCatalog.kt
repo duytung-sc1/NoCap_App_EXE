@@ -9,6 +9,9 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import java.io.File
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
 object CloudCatalog {
     val books = MutableStateFlow(SeedCatalogDataSource.books)
@@ -22,12 +25,38 @@ object CloudCatalog {
                     check(it.isSuccessful) { "Không tải được danh mục" }
                     val text = it.body?.string() ?: error("Danh mục trống")
                     applyJson(text)
-                    val temporary = File(context.filesDir, "cloud-catalog-v2.tmp")
-                    temporary.writeText(text); check(temporary.renameTo(cache))
+                    replaceCache(cache, text)
                 }
             }
         }
     }
+
+    /** Replaces the last-known-good catalog without leaving a partial cache on process death. */
+    internal fun replaceCache(cache: File, text: String) {
+        val parent = requireNotNull(cache.parentFile) { "Catalog cache needs a parent directory" }
+        parent.mkdirs()
+        val temporary = File(parent, "${cache.name}.tmp")
+        try {
+            temporary.writeText(text)
+            try {
+                Files.move(
+                    temporary.toPath(),
+                    cache.toPath(),
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING
+                )
+            } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(
+                    temporary.toPath(),
+                    cache.toPath(),
+                    StandardCopyOption.REPLACE_EXISTING
+                )
+            }
+        } finally {
+            temporary.delete()
+        }
+    }
+
     internal fun applyJson(text: String) {
         val json = JSONObject(text)
         val bookRows = json.getJSONArray("books")
