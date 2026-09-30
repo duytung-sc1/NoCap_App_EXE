@@ -6,6 +6,13 @@ enum class ReaderTheme {
     SEPIA
 }
 
+enum class AppColorPalette {
+    NOCAP_NAVY,
+    SAGE,
+    VIOLET,
+    SYSTEM_DYNAMIC
+}
+
 enum class ReaderFontFamily {
     SYSTEM_DEFAULT,
     SERIF,
@@ -28,6 +35,7 @@ enum class ReaderOrientation {
 
 data class ReaderPreferences(
     val theme: ReaderTheme = ReaderTheme.LIGHT,
+    val appColorPalette: AppColorPalette = AppColorPalette.NOCAP_NAVY,
     val fontFamily: ReaderFontFamily = ReaderFontFamily.SYSTEM_DEFAULT,
     val customFontName: String? = null,
     val fontSizeMultiplier: Float = 1.0f,

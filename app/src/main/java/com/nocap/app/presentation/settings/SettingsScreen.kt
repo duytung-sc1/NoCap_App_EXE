@@ -14,6 +14,7 @@ import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -71,11 +72,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.nocap.app.core.datastore.AppColorPalette
 import com.nocap.app.core.datastore.ReaderFontFamily
 import com.nocap.app.core.datastore.ReaderTextAlignment
 import com.nocap.app.core.datastore.ReaderTheme
@@ -808,6 +811,62 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Màu giao diện ứng dụng",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Chọn màu nhấn phù hợp với cách bạn đọc. Màu trang sách được đặt riêng bên dưới.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        AppPaletteCard(
+                            name = "NoCap Navy",
+                            swatchColor = Color(0xFF1E3A8A),
+                            isSelected = preferences.appColorPalette == AppColorPalette.NOCAP_NAVY,
+                            onClick = { viewModel.updateAppColorPalette(AppColorPalette.NOCAP_NAVY) },
+                            modifier = Modifier.weight(1f)
+                        )
+                        AppPaletteCard(
+                            name = "Xanh lá dịu",
+                            swatchColor = Color(0xFF2F6B57),
+                            isSelected = preferences.appColorPalette == AppColorPalette.SAGE,
+                            onClick = { viewModel.updateAppColorPalette(AppColorPalette.SAGE) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        AppPaletteCard(
+                            name = "Tím tri thức",
+                            swatchColor = Color(0xFF6750A4),
+                            isSelected = preferences.appColorPalette == AppColorPalette.VIOLET,
+                            onClick = { viewModel.updateAppColorPalette(AppColorPalette.VIOLET) },
+                            modifier = Modifier.weight(1f)
+                        )
+                        AppPaletteCard(
+                            name = "Màu hệ thống",
+                            swatchColor = MaterialTheme.colorScheme.secondary,
+                            isSelected = preferences.appColorPalette == AppColorPalette.SYSTEM_DYNAMIC,
+                            onClick = { viewModel.updateAppColorPalette(AppColorPalette.SYSTEM_DYNAMIC) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider()
+                    Spacer(modifier = Modifier.height(16.dp))
+
                     // Theme
                     Text(
                         text = "Giao diện đọc sách",
@@ -1208,6 +1267,66 @@ fun SettingsScreen(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun AppPaletteCard(
+    name: String,
+    swatchColor: Color,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .heightIn(min = 56.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(
+                width = if (isSelected) 2.dp else 1.dp,
+                color = if (isSelected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.28f)
+                },
+                shape = RoundedCornerShape(12.dp)
+            )
+            .selectable(
+                selected = isSelected,
+                onClick = onClick,
+                role = Role.RadioButton
+            )
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(22.dp)
+                .clip(CircleShape)
+                .background(swatchColor)
+                .border(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.16f),
+                    shape = CircleShape
+                )
+        )
+        Text(
+            text = name,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+            maxLines = 2,
+            modifier = Modifier.weight(1f)
+        )
+        if (isSelected) {
+            Icon(
+                imageVector = Icons.Default.CheckCircle,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp)
+            )
+        }
     }
 }
 

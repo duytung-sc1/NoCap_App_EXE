@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.nocap.app.R
+import com.nocap.app.core.datastore.AppColorPalette
 import com.nocap.app.core.datastore.DevicePreferencesDataStore
 import com.nocap.app.core.datastore.ReaderFontFamily
 import com.nocap.app.core.datastore.ReaderPreferences
@@ -377,6 +378,10 @@ class SettingsViewModel(
     // Reader Preferences methods
     fun updateTheme(theme: ReaderTheme) {
         viewModelScope.launch { preferencesDataStore.updateTheme(theme) }
+    }
+
+    fun updateAppColorPalette(palette: AppColorPalette) {
+        viewModelScope.launch { preferencesDataStore.updateAppColorPalette(palette) }
     }
 
     fun updateFontFamily(fontFamily: ReaderFontFamily) {

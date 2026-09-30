@@ -7,6 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -43,7 +44,13 @@ class MainActivity : FragmentActivity() {
         setContent {
             val auth by com.nocap.app.data.auth.CloudAuthRepository.getInstance(this).authState.collectAsStateWithLifecycle()
             val profile by com.nocap.app.data.sync.Profiles.active.collectAsStateWithLifecycle()
-            EbookAppTheme {
+            val readerPreferencesStore = remember {
+                com.nocap.app.core.datastore.ReaderPreferencesDataStore(applicationContext)
+            }
+            val readerPreferences by readerPreferencesStore.readerPreferences.collectAsStateWithLifecycle(
+                initialValue = com.nocap.app.core.datastore.ReaderPreferences()
+            )
+            EbookAppTheme(appColorPalette = readerPreferences.appColorPalette) {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     val sharedSource by pendingSharedSource.collectAsStateWithLifecycle()
                     if (auth == com.nocap.app.domain.model.AuthState.Loading) {

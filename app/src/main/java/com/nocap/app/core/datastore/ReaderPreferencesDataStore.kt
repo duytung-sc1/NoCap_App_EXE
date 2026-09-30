@@ -17,6 +17,7 @@ class ReaderPreferencesDataStore(private val context: Context) {
     internal val backupStore get() = context.dataStore
     companion object {
         private val KEY_THEME = stringPreferencesKey("reader_theme")
+        private val KEY_APP_COLOR_PALETTE = stringPreferencesKey("app_color_palette")
         private val KEY_FONT_FAMILY = stringPreferencesKey("reader_font_family")
         private val KEY_CUSTOM_FONT_NAME = stringPreferencesKey("reader_custom_font_name")
         private val KEY_FONT_SIZE = floatPreferencesKey("reader_font_size")
@@ -36,6 +37,9 @@ class ReaderPreferencesDataStore(private val context: Context) {
 
     val readerPreferences: Flow<ReaderPreferences> = context.dataStore.data.map { preferences ->
         val theme = preferences[KEY_THEME]?.let { runCatching { ReaderTheme.valueOf(it) }.getOrNull() } ?: ReaderTheme.LIGHT
+        val appColorPalette = preferences[KEY_APP_COLOR_PALETTE]
+            ?.let { runCatching { AppColorPalette.valueOf(it) }.getOrNull() }
+            ?: AppColorPalette.NOCAP_NAVY
         val fontFamily = preferences[KEY_FONT_FAMILY]?.let { runCatching { ReaderFontFamily.valueOf(it) }.getOrNull() } ?: ReaderFontFamily.SYSTEM_DEFAULT
         val customFontName = preferences[KEY_CUSTOM_FONT_NAME]
         val fontSize = preferences[KEY_FONT_SIZE] ?: 1.0f
@@ -54,6 +58,7 @@ class ReaderPreferencesDataStore(private val context: Context) {
 
         ReaderPreferences(
             theme = theme,
+            appColorPalette = appColorPalette,
             fontFamily = fontFamily,
             customFontName = customFontName,
             fontSizeMultiplier = fontSize,
@@ -74,6 +79,10 @@ class ReaderPreferencesDataStore(private val context: Context) {
 
     suspend fun updateTheme(theme: ReaderTheme) {
         context.dataStore.edit { it[KEY_THEME] = theme.name }
+    }
+
+    suspend fun updateAppColorPalette(palette: AppColorPalette) {
+        context.dataStore.edit { it[KEY_APP_COLOR_PALETTE] = palette.name }
     }
 
     suspend fun updateFontFamily(fontFamily: ReaderFontFamily, customFontName: String? = null) {
